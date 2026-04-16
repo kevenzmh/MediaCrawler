@@ -37,6 +37,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import douyin as douyin_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.checkpoint import CheckpointManager
 from var import crawler_type_var, source_keyword_var
 
 from .client import DouYinClient
@@ -120,12 +121,21 @@ class DouYinCrawler(AbstractCrawler):
         if config.CRAWLER_MAX_NOTES_COUNT < dy_limit_count:
             config.CRAWLER_MAX_NOTES_COUNT = dy_limit_count
         start_page = config.START_PAGE  # start page number
+        checkpoint = CheckpointManager(platform=config.PLATFORM, crawler_type=config.CRAWLER_TYPE)
+        if checkpoint.has_checkpoint():
+            checkpoint.load_checkpoint()
+            utils.logger.info("[DouYinCrawler.search] 发现断点续爬记录，从上次进度恢复")
         for keyword in config.KEYWORDS.split(","):
             source_keyword_var.set(keyword)
-            utils.logger.info(f"[DouYinCrawler.search] Current keyword: {keyword}")
+            # 从 checkpoint 恢复该关键词的进度
+            keyword_progress = checkpoint.get_keyword_progress(keyword)
+            if keyword_progress and keyword_progress.get("completed"):
+                utils.logger.info(f"[DouYinCrawler.search] 关键词 '{keyword}' 已完成，跳过")
+                continue
             aweme_list: List[str] = []
-            page = 0
-            dy_search_id = ""
+            page = keyword_progress.get("page", start_page) if keyword_progress else start_page
+            dy_search_id = keyword_progress.get("cursor_token", "") if keyword_progress else ""
+            utils.logger.info(f"[DouYinCrawler.search] Current keyword: {keyword}, start page: {page}")
             while (page - start_page + 1) * dy_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
                 if page < start_page:
                     utils.logger.info(f"[DouYinCrawler.search] Skip {page}")
@@ -161,14 +171,23 @@ class DouYinCrawler(AbstractCrawler):
                     page_aweme_list.append(aweme_info.get("aweme_id", ""))
                     await douyin_store.update_douyin_aweme(aweme_item=aweme_info)
                     await self.get_aweme_media(aweme_item=aweme_info)
-                
+
                 # Batch get note comments for the current page
                 await self.batch_get_note_comments(page_aweme_list)
+
+                # 每页成功后保存 checkpoint（含 dy_search_id）
+                checkpoint.save_checkpoint(keyword=keyword, page=page, cursor_token=dy_search_id)
 
                 # Sleep after each page navigation
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                 utils.logger.info(f"[DouYinCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
             utils.logger.info(f"[DouYinCrawler.search] keyword:{keyword}, aweme_list:{aweme_list}")
+
+            # 关键词爬完，标记 completed
+            checkpoint.mark_keyword_completed(keyword)
+
+        # 全部完成，清理 checkpoint
+        checkpoint.clear_checkpoint()
 
     async def get_specified_awemes(self):
         """Get the information and comments of the specified post from URLs or IDs"""

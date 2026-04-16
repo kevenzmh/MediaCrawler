@@ -45,6 +45,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import bilibili as bilibili_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.checkpoint import CheckpointManager
 from var import crawler_type_var, source_keyword_var
 
 from .client import BilibiliClient
@@ -186,10 +187,19 @@ class BilibiliCrawler(AbstractCrawler):
         if config.CRAWLER_MAX_NOTES_COUNT < bili_limit_count:
             config.CRAWLER_MAX_NOTES_COUNT = bili_limit_count
         start_page = config.START_PAGE  # start page number
+        checkpoint = CheckpointManager(platform=config.PLATFORM, crawler_type=config.CRAWLER_TYPE)
+        if checkpoint.has_checkpoint():
+            checkpoint.load_checkpoint()
+            utils.logger.info("[BilibiliCrawler.search_by_keywords] 发现断点续爬记录，从上次进度恢复")
         for keyword in config.KEYWORDS.split(","):
             source_keyword_var.set(keyword)
-            utils.logger.info(f"[BilibiliCrawler.search_by_keywords] Current search keyword: {keyword}")
-            page = 1
+            # 从 checkpoint 恢复该关键词的进度
+            keyword_progress = checkpoint.get_keyword_progress(keyword)
+            if keyword_progress and keyword_progress.get("completed"):
+                utils.logger.info(f"[BilibiliCrawler.search_by_keywords] 关键词 '{keyword}' 已完成，跳过")
+                continue
+            page = keyword_progress.get("page", start_page) if keyword_progress else start_page
+            utils.logger.info(f"[BilibiliCrawler.search_by_keywords] Current search keyword: {keyword}, start page: {page}")
             while (page - start_page + 1) * bili_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
                 if page < start_page:
                     utils.logger.info(f"[BilibiliCrawler.search_by_keywords] Skip page: {page}")
@@ -227,11 +237,20 @@ class BilibiliCrawler(AbstractCrawler):
                         await self.get_bilibili_video(video_item, semaphore)
                 page += 1
 
+                # 每页成功后保存 checkpoint
+                checkpoint.save_checkpoint(keyword=keyword, page=page)
+
                 # Sleep after page navigation
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                 utils.logger.info(f"[BilibiliCrawler.search_by_keywords] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
 
                 await self.batch_get_video_comments(video_id_list)
+
+            # 关键词爬完，标记 completed
+            checkpoint.mark_keyword_completed(keyword)
+
+        # 全部完成，清理 checkpoint
+        checkpoint.clear_checkpoint()
 
     async def search_by_keywords_in_time_range(self, daily_limit: bool):
         """

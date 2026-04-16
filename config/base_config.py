@@ -136,6 +136,11 @@ CRAWLER_MAX_SLEEP_SEC = 2
 # 警告：禁用 SSL 验证将使所有流量暴露于中间人攻击风险，请勿在生产环境中开启。
 DISABLE_SSL_VERIFY = False
 
+# 是否启用断点续爬功能
+# 开启后，搜索模式下每页爬取成功后会自动保存进度到 data/.checkpoint/ 目录
+# 中断后再次启动相同任务时，会自动从上次进度恢复，跳过已爬取的页码
+ENABLE_CHECKPOINT = True
+
 from .bilibili_config import *
 from .xhs_config import *
 from .dy_config import *
