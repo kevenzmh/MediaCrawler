@@ -14,7 +14,7 @@ from typing import Optional, Dict
 import config
 from tools.utils import utils
 
-CHECKPOINT_DIR = "data/.checkpoint"
+CHECKPOINT_DIR = os.path.join(os.getcwd(), "data", ".checkpoint")
 
 
 class CheckpointManager:

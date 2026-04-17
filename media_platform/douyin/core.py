@@ -167,6 +167,15 @@ class DouYinCrawler(AbstractCrawler):
                         aweme_info: Dict = (post_item.get("aweme_info") or post_item.get("aweme_mix_info", {}).get("mix_items")[0])
                     except TypeError:
                         continue
+                    # 视频时长过滤
+                    if config.DY_MIN_VIDEO_DURATION > 0 or config.DY_MAX_VIDEO_DURATION > 0:
+                        duration_sec = aweme_info.get("video", {}).get("duration", 0) / 1000
+                        if config.DY_MIN_VIDEO_DURATION > 0 and duration_sec < config.DY_MIN_VIDEO_DURATION:
+                            utils.logger.info(f"[DouYinCrawler.search] 视频时长 {duration_sec:.0f}s 不满足最小 {config.DY_MIN_VIDEO_DURATION}s，跳过: {aweme_info.get('aweme_id')}")
+                            continue
+                        if config.DY_MAX_VIDEO_DURATION > 0 and duration_sec > config.DY_MAX_VIDEO_DURATION:
+                            utils.logger.info(f"[DouYinCrawler.search] 视频时长 {duration_sec:.0f}s 超过最大 {config.DY_MAX_VIDEO_DURATION}s，跳过: {aweme_info.get('aweme_id')}")
+                            continue
                     aweme_list.append(aweme_info.get("aweme_id", ""))
                     page_aweme_list.append(aweme_info.get("aweme_id", ""))
                     await douyin_store.update_douyin_aweme(aweme_item=aweme_info)

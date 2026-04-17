@@ -20,6 +20,12 @@
 # Douyin platform configuration
 PUBLISH_TIME_TYPE = 0
 
+# 视频时长过滤（单位：秒）
+# 只爬取时长在该范围内的视频，设为 0 表示不限制
+# 例如：只爬 10~300 秒的视频，设为 DY_MIN_VIDEO_DURATION = 10, DY_MAX_VIDEO_DURATION = 300
+DY_MIN_VIDEO_DURATION = 0
+DY_MAX_VIDEO_DURATION = 0
+
 # Specify DY video URL list (supports multiple formats)
 # Supported formats:
 # 1. Full video URL: "https://www.douyin.com/video/7525538910311632128"
