@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 from urllib.parse import quote, urlencode
 
 import httpx
-from playwright.async_api import BrowserContext, Page
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_not_exception_type
 from tools.httpx_util import make_async_client
 
@@ -50,7 +49,6 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         proxy=None,
         *,
         headers: Dict[str, str],
-        playwright_page: Page,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
@@ -68,7 +66,6 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         self.NOTE_NOT_FOUND_CODE = -510000
         self.NOTE_ABNORMAL_STR = "Note status abnormal, please check later"
         self.NOTE_ABNORMAL_CODE = -510001
-        self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
         self._extractor = XiaoHongShuExtractor()
         # Initialize proxy pool (from ProxyRefreshMixin)
@@ -260,18 +257,20 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         utils.logger.info(f"[XiaoHongShuClient.pong] Login state result: {ping_flag}")
         return ping_flag
 
-    async def update_cookies(self, browser_context: BrowserContext):
+    async def update_cookies(self, cookie_str: str = "", cookie_dict: Optional[Dict] = None):
         """
         Update cookies method provided by API client, usually called after successful login
         Args:
-            browser_context: Browser context object
+            cookie_str: Cookie string to set in headers
+            cookie_dict: Cookie dictionary to store
 
         Returns:
 
         """
-        cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
-        self.headers["Cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
+        if cookie_str:
+            self.headers["Cookie"] = cookie_str
+        if cookie_dict:
+            self.cookie_dict = cookie_dict
 
     async def get_note_by_keyword(
         self,

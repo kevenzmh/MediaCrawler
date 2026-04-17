@@ -28,7 +28,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 from urllib.parse import urlencode
 
 import httpx
-from playwright.async_api import BrowserContext, Page
 from tools.httpx_util import make_async_client
 
 import config
@@ -48,11 +47,10 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
 
     def __init__(
         self,
-        timeout=60,  # For media crawling, Bilibili long videos need a longer timeout
+        timeout=60,
         proxy=None,
         *,
         headers: Dict[str, str],
-        playwright_page: Page,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
@@ -60,7 +58,6 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         self.timeout = timeout
         self.headers = headers
         self._host = "https://api.bilibili.com"
-        self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
@@ -95,23 +92,10 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         return BilibiliSign(img_key, sub_key).sign(req_data)
 
     async def get_wbi_keys(self) -> Tuple[str, str]:
-        """
-        Get the latest img_key and sub_key
-        :return:
-        """
-        local_storage = await self.playwright_page.evaluate("() => window.localStorage")
-        wbi_img_urls = local_storage.get("wbi_img_urls", "")
-        if not wbi_img_urls:
-            img_url_from_storage = local_storage.get("wbi_img_url")
-            sub_url_from_storage = local_storage.get("wbi_sub_url")
-            if img_url_from_storage and sub_url_from_storage:
-                wbi_img_urls = f"{img_url_from_storage}-{sub_url_from_storage}"
-        if wbi_img_urls and "-" in wbi_img_urls:
-            img_url, sub_url = wbi_img_urls.split("-")
-        else:
-            resp = await self.request(method="GET", url=self._host + "/x/web-interface/nav")
-            img_url: str = resp['wbi_img']['img_url']
-            sub_url: str = resp['wbi_img']['sub_url']
+        """Get the latest img_key and sub_key via API."""
+        resp = await self.request(method="GET", url=self._host + "/x/web-interface/nav")
+        img_url: str = resp['wbi_img']['img_url']
+        sub_url: str = resp['wbi_img']['sub_url']
         img_key = img_url.rsplit('/', 1)[1].split('.')[0]
         sub_key = sub_url.rsplit('/', 1)[1].split('.')[0]
         return img_key, sub_key
@@ -145,8 +129,7 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
             ping_flag = False
         return ping_flag
 
-    async def update_cookies(self, browser_context: BrowserContext):
-        cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
+    async def update_cookies(self, cookie_str: str = "", cookie_dict: Optional[Dict] = None):
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
 

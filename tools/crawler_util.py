@@ -34,13 +34,12 @@ from typing import Dict, List, Optional, Tuple, cast
 
 import httpx
 from PIL import Image, ImageDraw, ImageShow
-from playwright.async_api import Cookie, Page
 
 from . import utils
 from .httpx_util import make_async_client
 
 
-async def find_login_qrcode(page: Page, selector: str) -> str:
+async def find_login_qrcode(page, selector: str) -> str:
     """find login qrcode image from target selector"""
     try:
         elements = await page.wait_for_selector(
@@ -63,7 +62,7 @@ async def find_login_qrcode(page: Page, selector: str) -> str:
         return ""
 
 
-async def find_qrcode_img_from_canvas(page: Page, canvas_selector: str) -> str:
+async def find_qrcode_img_from_canvas(page, canvas_selector: str) -> str:
     """
     find qrcode image from canvas element
     Args:
@@ -135,7 +134,7 @@ def get_mobile_user_agent() -> str:
     return random.choice(ua_list)
 
 
-def convert_cookies(cookies: Optional[List[Cookie]]) -> Tuple[str, Dict]:
+def convert_cookies(cookies: Optional[List[Dict]]) -> Tuple[str, Dict]:
     if not cookies:
         return "", {}
     cookies_str = ";".join([f"{cookie.get('name')}={cookie.get('value')}" for cookie in cookies])
@@ -161,6 +160,11 @@ def convert_str_cookie_to_dict(cookie_str: str) -> Dict:
             cookie_value = "".join(cookie_value)
         cookie_dict[cookie_list[0]] = cookie_value
     return cookie_dict
+
+
+def cookie_str_to_pair(cookie_str: str) -> Tuple[str, Dict]:
+    """Convert cookie string to (cookie_str, cookie_dict) pair."""
+    return cookie_str, convert_str_cookie_to_dict(cookie_str)
 
 
 def match_interact_info_count(count_str: str) -> int:

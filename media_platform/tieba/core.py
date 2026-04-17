@@ -64,7 +64,7 @@ class TieBaCrawler(AbstractCrawler):
         async with async_playwright() as playwright:
             chromium = playwright.chromium
 
-            sessions = await self.account_manager.create_sessions(
+            sessions = await self.account_manager.create_sessions_with_browser(
                 platform=config.PLATFORM,
                 playwright=playwright,
                 chromium=chromium,
@@ -88,7 +88,8 @@ class TieBaCrawler(AbstractCrawler):
                         cookie_str=session.cookie_str,
                     )
                     await login_obj.begin()
-                    await session.api_client.update_cookies(browser_context=session.browser_context)
+                    cookie_str, cookie_dict = utils.convert_cookies(await session.browser_context.cookies())
+                    await session.api_client.update_cookies(cookie_str=cookie_str, cookie_dict=cookie_dict)
 
             crawler_type_var.set(config.CRAWLER_TYPE)
 

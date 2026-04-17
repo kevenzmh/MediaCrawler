@@ -22,20 +22,11 @@ import random
 from asyncio import Task
 from typing import Any, Dict, List, Optional, Tuple
 
-from playwright.async_api import (
-    BrowserContext,
-    BrowserType,
-    Page,
-    Playwright,
-    async_playwright,
-)
-
 import config
 from account import AccountManager, AccountSession
 from base.base_crawler import AbstractCrawler
 from store import douyin as douyin_store
 from tools import utils
-from tools.cdp_browser import CDPBrowserManager
 from tools.checkpoint import CheckpointManager
 from var import crawler_type_var, source_keyword_var
 
@@ -50,47 +41,38 @@ class DouYinCrawler(AbstractCrawler):
 
     def __init__(self) -> None:
         self.index_url = "https://www.douyin.com"
+        self.user_agent = utils.get_user_agent()
         self.account_manager = AccountManager()
 
     async def start(self) -> None:
-        async with async_playwright() as playwright:
-            chromium = playwright.chromium
-            sessions = await self.account_manager.create_sessions(
-                platform="dy",
-                playwright=playwright,
-                chromium=chromium,
-                user_agent=None,
-                launch_browser_fn=self.launch_browser,
-                launch_cdp_fn=self.launch_browser_with_cdp,
-                stealth_js_path="libs/stealth.min.js",
-                index_url=self.index_url,
-            )
+        sessions = await self.account_manager.create_sessions_headless(platform="dy")
 
-            # Login and create client for each session
-            for session in sessions:
-                session.api_client = await self._create_client_for_session(session)
-                if not await session.api_client.pong(browser_context=session.browser_context):
-                    login_obj = DouYinLogin(
-                        login_type=session.login_type,
-                        login_phone="",
-                        browser_context=session.browser_context,
-                        context_page=session.context_page,
-                        cookie_str=session.cookie_str,
-                    )
-                    await login_obj.begin()
-                    await session.api_client.update_cookies(browser_context=session.browser_context)
+        for session in sessions:
+            cookie_str = session.cookie_str
+            cookie_dict = utils.convert_str_cookie_to_dict(cookie_str) if cookie_str else {}
 
-            crawler_type_var.set(config.CRAWLER_TYPE)
+            if cookie_str:
+                session.api_client = self._create_client_from_cookies(session, cookie_str, cookie_dict)
+            else:
+                cookie_str, cookie_dict = await self._login_via_playwright(session)
+                session.api_client = self._create_client_from_cookies(session, cookie_str, cookie_dict)
 
-            # Run crawl tasks in parallel across accounts
-            semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-            tasks = [
-                self._crawl_with_session(session, semaphore)
-                for session in sessions
-            ]
-            await asyncio.gather(*tasks, return_exceptions=True)
-            await self.account_manager.close_all()
-            utils.logger.info("[DouYinCrawler.start] Douyin Crawler finished ...")
+            # Verify login
+            if not await session.api_client.pong():
+                cookie_str, cookie_dict = await self._login_via_playwright(session)
+                session.api_client = self._create_client_from_cookies(session, cookie_str, cookie_dict)
+
+        crawler_type_var.set(config.CRAWLER_TYPE)
+
+        # Run crawl tasks in parallel across accounts
+        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+        tasks = [
+            self._crawl_with_session(session, semaphore)
+            for session in sessions
+        ]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await self.account_manager.close_all()
+        utils.logger.info("[DouYinCrawler.start] Douyin Crawler finished ...")
 
     async def _crawl_with_session(self, session: AccountSession, semaphore: asyncio.Semaphore):
         """Run crawl logic for a single account session."""
@@ -106,29 +88,47 @@ class DouYinCrawler(AbstractCrawler):
                 f"[DouYinCrawler._crawl_with_session] Account '{session.account_id}' error: {ex}"
             )
 
-    async def _create_client_for_session(self, session: AccountSession) -> DouYinClient:
-        """Create DouYin client for a specific account session."""
+    def _create_client_from_cookies(self, session: AccountSession, cookie_str: str, cookie_dict: Dict) -> DouYinClient:
+        """Create DouYin client from cookie string and dict (no browser needed)."""
         utils.logger.info(
-            f"[DouYinCrawler._create_client_for_session] Creating client for account '{session.account_id}'"
-        )
-        cookie_str, cookie_dict = utils.convert_cookies(
-            await session.browser_context.cookies()
+            f"[DouYinCrawler._create_client_from_cookies] Creating client for account '{session.account_id}'"
         )
         douyin_client = DouYinClient(
             proxy=session.httpx_proxy,
             headers={
-                "User-Agent": await session.context_page.evaluate("() => navigator.userAgent"),
+                "User-Agent": self.user_agent,
                 "Cookie": cookie_str,
                 "Host": "www.douyin.com",
                 "Origin": "https://www.douyin.com/",
                 "Referer": "https://www.douyin.com/",
                 "Content-Type": "application/json;charset=UTF-8",
             },
-            playwright_page=session.context_page,
             cookie_dict=cookie_dict,
             proxy_ip_pool=session.proxy_ip_pool,
         )
         return douyin_client
+
+    async def _login_via_playwright(self, session: AccountSession) -> Tuple[str, Dict]:
+        """Launch Playwright only for login, extract cookies, close browser."""
+        from playwright.async_api import async_playwright
+        async with async_playwright() as playwright:
+            chromium = playwright.chromium
+            return await self.account_manager.login_via_playwright(
+                session=session,
+                playwright=playwright,
+                chromium=chromium,
+                user_agent=self.user_agent,
+                launch_browser_fn=self._launch_browser,
+                login_obj_factory=lambda s: DouYinLogin(
+                    login_type=s.login_type,
+                    login_phone="",
+                    browser_context=s.browser_context,
+                    context_page=s.context_page,
+                    cookie_str=s.cookie_str,
+                ),
+                index_url=self.index_url,
+                stealth_js_path="libs/stealth.min.js",
+            )
 
     async def search(self, session: Optional[AccountSession] = None) -> None:
         client = session.api_client if session else self.account_manager.sessions[0].api_client
@@ -347,76 +347,29 @@ class DouYinCrawler(AbstractCrawler):
                 await douyin_store.update_douyin_aweme(aweme_item=aweme_item)
                 await self.get_aweme_media(aweme_item=aweme_item)
 
-    async def launch_browser(
+    async def _launch_browser(
         self,
-        chromium: BrowserType,
+        chromium,
         playwright_proxy: Optional[Dict],
         user_agent: Optional[str],
         headless: bool = True,
         account_id: str = "",
-    ) -> BrowserContext:
-        """Launch browser and create browser context"""
+    ):
+        """Launch browser for login only (Playwright is an optional dependency for headless crawling)."""
         if config.SAVE_LOGIN_STATE:
-            # Use account-specific user_data_dir for multi-account isolation
             dir_name = f"{config.PLATFORM}_{account_id}" if account_id else config.USER_DATA_DIR % config.PLATFORM  # type: ignore
             user_data_dir = os.path.join(os.getcwd(), "browser_data", dir_name)
-            browser_context = await chromium.launch_persistent_context(
+            return await chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
                 accept_downloads=True,
                 headless=headless,
-                proxy=playwright_proxy,  # type: ignore
-                viewport={
-                    "width": 1920,
-                    "height": 1080
-                },
+                proxy=playwright_proxy,
+                viewport={"width": 1920, "height": 1080},
                 user_agent=user_agent,
-            )  # type: ignore
-            return browser_context
-        else:
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy)  # type: ignore
-            browser_context = await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
-            return browser_context
-
-    async def launch_browser_with_cdp(
-        self,
-        playwright: Playwright,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-        account_id: str = "",
-    ) -> BrowserContext:
-        """
-        使用CDP模式启动浏览器
-        """
-        try:
-            cdp_manager = CDPBrowserManager()
-            browser_context = await cdp_manager.launch_and_connect(
-                playwright=playwright,
-                playwright_proxy=playwright_proxy,
-                user_agent=user_agent,
-                headless=headless,
             )
-
-            # Add anti-detection script
-            await cdp_manager.add_stealth_script()
-
-            # Show browser information
-            browser_info = await cdp_manager.get_browser_info()
-            utils.logger.info(f"[DouYinCrawler] CDP浏览器信息: {browser_info}")
-
-            # Store cdp_manager on the session for cleanup
-            for s in self.account_manager.sessions:
-                if s.account_id == account_id:
-                    s.cdp_manager = cdp_manager
-                    break
-
-            return browser_context
-
-        except Exception as e:
-            utils.logger.error(f"[DouYinCrawler] CDP模式启动失败，回退到标准模式: {e}")
-            # Fall back to standard mode
-            chromium = playwright.chromium
-            return await self.launch_browser(chromium, playwright_proxy, user_agent, headless, account_id)
+        else:
+            browser = await chromium.launch(headless=headless, proxy=playwright_proxy)
+            return await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
 
     async def close(self) -> None:
         """Close all browser contexts"""

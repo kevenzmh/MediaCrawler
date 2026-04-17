@@ -30,21 +30,11 @@ from typing import Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta
 import pandas as pd
 
-from playwright.async_api import (
-    BrowserContext,
-    BrowserType,
-    Page,
-    Playwright,
-    async_playwright,
-)
-from playwright._impl._errors import TargetClosedError
-
 import config
 from account import AccountManager, AccountSession
 from base.base_crawler import AbstractCrawler
 from store import bilibili as bilibili_store
 from tools import utils
-from tools.cdp_browser import CDPBrowserManager
 from tools.checkpoint import CheckpointManager
 from var import crawler_type_var, source_keyword_var
 
@@ -63,44 +53,34 @@ class BilibiliCrawler(AbstractCrawler):
         self.account_manager = AccountManager()
 
     async def start(self):
-        async with async_playwright() as playwright:
-            chromium = playwright.chromium
-            sessions = await self.account_manager.create_sessions(
-                platform=config.PLATFORM,
-                playwright=playwright,
-                chromium=chromium,
-                user_agent=self.user_agent,
-                launch_browser_fn=self.launch_browser,
-                launch_cdp_fn=self.launch_browser_with_cdp,
-                stealth_js_path="libs/stealth.min.js",
-                index_url=self.index_url,
-            )
+        sessions = await self.account_manager.create_sessions_headless(platform=config.PLATFORM)
 
-            # Login and create client for each session
-            for session in sessions:
-                session.api_client = await self._create_client_for_session(session)
-                if not await session.api_client.pong():
-                    login_obj = BilibiliLogin(
-                        login_type=session.login_type,
-                        login_phone="",
-                        browser_context=session.browser_context,
-                        context_page=session.context_page,
-                        cookie_str=session.cookie_str,
-                    )
-                    await login_obj.begin()
-                    await session.api_client.update_cookies(browser_context=session.browser_context)
+        for session in sessions:
+            cookie_str = session.cookie_str
+            cookie_dict = utils.convert_str_cookie_to_dict(cookie_str) if cookie_str else {}
 
-            crawler_type_var.set(config.CRAWLER_TYPE)
+            if cookie_str:
+                session.api_client = self._create_client_from_cookies(session, cookie_str, cookie_dict)
+            else:
+                cookie_str, cookie_dict = await self._login_via_playwright(session)
+                session.api_client = self._create_client_from_cookies(session, cookie_str, cookie_dict)
 
-            # Run crawl tasks in parallel across accounts
-            semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-            tasks = [
-                self._crawl_with_session(session, semaphore)
-                for session in sessions
-            ]
-            await asyncio.gather(*tasks, return_exceptions=True)
-            await self.account_manager.close_all()
-            utils.logger.info("[BilibiliCrawler.start] Bilibili Crawler finished ...")
+            # Verify login
+            if not await session.api_client.pong():
+                cookie_str, cookie_dict = await self._login_via_playwright(session)
+                session.api_client = self._create_client_from_cookies(session, cookie_str, cookie_dict)
+
+        crawler_type_var.set(config.CRAWLER_TYPE)
+
+        # Run crawl tasks in parallel across accounts
+        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+        tasks = [
+            self._crawl_with_session(session, semaphore)
+            for session in sessions
+        ]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await self.account_manager.close_all()
+        utils.logger.info("[BilibiliCrawler.start] Bilibili Crawler finished ...")
 
     async def _crawl_with_session(self, session: AccountSession, semaphore: asyncio.Semaphore):
         """Run crawl logic for a single account session."""
@@ -127,13 +107,10 @@ class BilibiliCrawler(AbstractCrawler):
                 f"[BilibiliCrawler._crawl_with_session] Account '{session.account_id}' error: {ex}"
             )
 
-    async def _create_client_for_session(self, session: AccountSession) -> BilibiliClient:
-        """Create Bilibili client for a specific account session."""
+    def _create_client_from_cookies(self, session: AccountSession, cookie_str: str, cookie_dict: Dict) -> BilibiliClient:
+        """Create Bilibili client from cookie string and dict (no browser needed)."""
         utils.logger.info(
-            f"[BilibiliCrawler._create_client_for_session] Creating client for account '{session.account_id}'"
-        )
-        cookie_str, cookie_dict = utils.convert_cookies(
-            await session.browser_context.cookies()
+            f"[BilibiliCrawler._create_client_from_cookies] Creating client for account '{session.account_id}'"
         )
         client = BilibiliClient(
             proxy=session.httpx_proxy,
@@ -144,11 +121,32 @@ class BilibiliCrawler(AbstractCrawler):
                 "Referer": "https://www.bilibili.com",
                 "Content-Type": "application/json;charset=UTF-8",
             },
-            playwright_page=session.context_page,
             cookie_dict=cookie_dict,
             proxy_ip_pool=session.proxy_ip_pool,
         )
         return client
+
+    async def _login_via_playwright(self, session: AccountSession) -> Tuple[str, Dict]:
+        """Launch Playwright only for login, extract cookies, close browser."""
+        from playwright.async_api import async_playwright
+        async with async_playwright() as playwright:
+            chromium = playwright.chromium
+            return await self.account_manager.login_via_playwright(
+                session=session,
+                playwright=playwright,
+                chromium=chromium,
+                user_agent=self.user_agent,
+                launch_browser_fn=self._launch_browser,
+                login_obj_factory=lambda s: BilibiliLogin(
+                    login_type=s.login_type,
+                    login_phone="",
+                    browser_context=s.browser_context,
+                    context_page=s.context_page,
+                    cookie_str=s.cookie_str,
+                ),
+                index_url=self.index_url,
+                stealth_js_path="libs/stealth.min.js",
+            )
 
     async def search(self, session: Optional[AccountSession] = None):
         """
@@ -506,96 +504,35 @@ class BilibiliCrawler(AbstractCrawler):
                 utils.logger.error(f"[BilibiliCrawler.get_video_play_url_task] have not fund play url from :{aid}|{cid}, err: {ex}")
                 return None
 
-    async def launch_browser(
+    async def _launch_browser(
         self,
-        chromium: BrowserType,
+        chromium,
         playwright_proxy: Optional[Dict],
         user_agent: Optional[str],
         headless: bool = True,
         account_id: str = "",
-    ) -> BrowserContext:
-        """
-        launch browser and create browser context
-        :param chromium: chromium browser
-        :param playwright_proxy: playwright proxy
-        :param user_agent: user agent
-        :param headless: headless mode
-        :param account_id: account identifier for user data directory isolation
-        :return: browser context
-        """
-        utils.logger.info("[BilibiliCrawler.launch_browser] Begin create browser context ...")
+    ):
+        """Launch browser for login only (Playwright is an optional dependency for headless crawling)."""
         if config.SAVE_LOGIN_STATE:
-            # feat issue #14
-            # we will save login state to avoid login every time
-            # Use account-specific user_data_dir for multi-account isolation
             dir_name = f"{config.PLATFORM}_{account_id}" if account_id else config.USER_DATA_DIR % config.PLATFORM  # type: ignore
             user_data_dir = os.path.join(os.getcwd(), "browser_data", dir_name)
-            browser_context = await chromium.launch_persistent_context(
+            return await chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
                 accept_downloads=True,
                 headless=headless,
-                proxy=playwright_proxy,  # type: ignore
-                viewport={
-                    "width": 1920,
-                    "height": 1080
-                },
+                proxy=playwright_proxy,
+                viewport={"width": 1920, "height": 1080},
                 user_agent=user_agent,
-                channel="chrome",  # Use system's stable Chrome version
+                channel="chrome",
             )
-            return browser_context
         else:
-            # type: ignore
             browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel="chrome")
-            browser_context = await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
-            return browser_context
-
-    async def launch_browser_with_cdp(
-        self,
-        playwright: Playwright,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-        account_id: str = "",
-    ) -> BrowserContext:
-        """
-        Launch browser using CDP mode
-        """
-        try:
-            cdp_manager = CDPBrowserManager()
-            browser_context = await cdp_manager.launch_and_connect(
-                playwright=playwright,
-                playwright_proxy=playwright_proxy,
-                user_agent=user_agent,
-                headless=headless,
-            )
-
-            # Display browser information
-            browser_info = await cdp_manager.get_browser_info()
-            utils.logger.info(f"[BilibiliCrawler] CDP browser info: {browser_info}")
-
-            # Store cdp_manager on the session for cleanup
-            for s in self.account_manager.sessions:
-                if s.account_id == account_id:
-                    s.cdp_manager = cdp_manager
-                    break
-
-            return browser_context
-
-        except Exception as e:
-            utils.logger.error(f"[BilibiliCrawler] CDP mode launch failed, fallback to standard mode: {e}")
-            # Fallback to standard mode
-            chromium = playwright.chromium
-            return await self.launch_browser(chromium, playwright_proxy, user_agent, headless, account_id)
+            return await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
 
     async def close(self):
         """Close browser context"""
-        try:
-            await self.account_manager.close_all()
-            utils.logger.info("[BilibiliCrawler.close] Browser context closed ...")
-        except TargetClosedError:
-            utils.logger.warning("[BilibiliCrawler.close] Browser context was already closed.")
-        except Exception as e:
-            utils.logger.error(f"[BilibiliCrawler.close] An error occurred during close: {e}")
+        await self.account_manager.close_all()
+        utils.logger.info("[BilibiliCrawler.close] Browser context closed ...")
 
     async def get_bilibili_video(self, video_item: Dict, semaphore: asyncio.Semaphore, client: Optional[BilibiliClient] = None):
         """

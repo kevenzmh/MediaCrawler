@@ -26,10 +26,9 @@
 
 import random
 import re
-from typing import Optional
+from typing import Any, Optional
 
 import execjs
-from playwright.async_api import Page
 
 from model.m_douyin import VideoUrlInfo, CreatorUrlInfo
 from tools.crawler_util import extract_url_params_to_dict
@@ -58,7 +57,7 @@ def get_web_id():
 
 
 
-async def get_a_bogus(url: str, params: str, post_data: dict, user_agent: str, page: Page = None):
+async def get_a_bogus(url: str, params: str, post_data: dict, user_agent: str, page: Any = None):
     """
     Get a_bogus parameter, currently does not support POST request type signature
     """
@@ -82,20 +81,6 @@ def get_a_bogus_from_js(url: str, params: str, user_agent: str):
 
 
 
-async def get_a_bogus_from_playwright(params: str, post_data: dict, user_agent: str, page: Page):
-    """
-    Get a_bogus parameter through playwright
-    playwright version is deprecated
-    Returns:
-
-    """
-    if not post_data:
-        post_data = ""
-    a_bogus = await page.evaluate(
-        "([params, post_data, ua]) => window.bdms.init._v[2].p[42].apply(null, [0, 1, 8, params, post_data, ua])",
-        [params, post_data, user_agent])
-
-    return a_bogus
 
 
 def parse_video_info_from_url(url: str) -> VideoUrlInfo:

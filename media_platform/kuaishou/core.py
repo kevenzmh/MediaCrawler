@@ -24,20 +24,12 @@ import time
 from asyncio import Task
 from typing import Dict, List, Optional
 
-from playwright.async_api import (
-    BrowserContext,
-    BrowserType,
-    Playwright,
-    async_playwright,
-)
-
 import config
 from account import AccountManager, AccountSession
 from base.base_crawler import AbstractCrawler
 from model.m_kuaishou import CreatorUrlInfo
 from store import kuaishou as kuaishou_store
 from tools import utils
-from tools.cdp_browser import CDPBrowserManager
 from tools.checkpoint import CheckpointManager
 from var import comment_tasks_var, crawler_type_var, source_keyword_var
 
@@ -55,46 +47,57 @@ class KuaishouCrawler(AbstractCrawler):
         self.account_manager = AccountManager()
 
     async def start(self):
+        sessions = await self.account_manager.create_sessions_headless(platform=config.PLATFORM)
+
+        for session in sessions:
+            cookie_str = session.cookie_str
+            cookie_dict = utils.convert_str_cookie_to_dict(cookie_str) if cookie_str else {}
+
+            if cookie_str:
+                session.api_client = self._create_client_from_cookies(session, cookie_str, cookie_dict)
+            else:
+                cookie_str, cookie_dict = await self._login_via_playwright(session)
+                session.api_client = self._create_client_from_cookies(session, cookie_str, cookie_dict)
+
+            # Verify login
+            if not await session.api_client.pong():
+                cookie_str, cookie_dict = await self._login_via_playwright(session)
+                session.api_client = self._create_client_from_cookies(session, cookie_str, cookie_dict)
+
+        crawler_type_var.set(config.CRAWLER_TYPE)
+
+        # Run crawl tasks in parallel across accounts
+        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+        tasks = [
+            self._crawl_with_session(session, semaphore)
+            for session in sessions
+        ]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await self.account_manager.close_all()
+        utils.logger.info("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
+
+    async def _login_via_playwright(self, session):
+        """Launch Playwright for login only, extract cookies, close browser."""
+        from playwright.async_api import async_playwright
         async with async_playwright() as playwright:
             chromium = playwright.chromium
-            sessions = await self.account_manager.create_sessions(
-                platform=config.PLATFORM,
+            cookie_str, cookie_dict = await self.account_manager.login_via_playwright(
+                session=session,
                 playwright=playwright,
                 chromium=chromium,
                 user_agent=self.user_agent,
-                launch_browser_fn=self.launch_browser,
-                launch_cdp_fn=self.launch_browser_with_cdp,
-                stealth_js_path="libs/stealth.min.js",
+                launch_browser_fn=self._launch_browser,
+                login_obj_factory=lambda s: KuaishouLogin(
+                    login_type=s.login_type,
+                    login_phone="",
+                    browser_context=s.browser_context,
+                    context_page=s.context_page,
+                    cookie_str=s.cookie_str,
+                ),
                 index_url=f"{self.index_url}?isHome=1",
+                stealth_js_path="libs/stealth.min.js",
             )
-
-            # Login and create client for each session
-            for session in sessions:
-                session.api_client = await self._create_client_for_session(session)
-                if not await session.api_client.pong():
-                    login_obj = KuaishouLogin(
-                        login_type=session.login_type,
-                        login_phone="",
-                        browser_context=session.browser_context,
-                        context_page=session.context_page,
-                        cookie_str=session.cookie_str,
-                    )
-                    await login_obj.begin()
-                    await session.api_client.update_cookies(
-                        browser_context=session.browser_context
-                    )
-
-            crawler_type_var.set(config.CRAWLER_TYPE)
-
-            # Run crawl tasks in parallel across accounts
-            semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-            tasks = [
-                self._crawl_with_session(session, semaphore)
-                for session in sessions
-            ]
-            await asyncio.gather(*tasks, return_exceptions=True)
-            await self.account_manager.close_all()
-            utils.logger.info("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
+        return cookie_str, cookie_dict
 
     async def _crawl_with_session(self, session: AccountSession, semaphore: asyncio.Semaphore):
         """Run crawl logic for a single account session."""
@@ -110,13 +113,10 @@ class KuaishouCrawler(AbstractCrawler):
                 f"[KuaishouCrawler._crawl_with_session] Account '{session.account_id}' error: {ex}"
             )
 
-    async def _create_client_for_session(self, session: AccountSession) -> KuaiShouClient:
-        """Create KuaiShou client for a specific account session."""
+    def _create_client_from_cookies(self, session: AccountSession, cookie_str: str, cookie_dict: Dict) -> KuaiShouClient:
+        """Create KuaiShou client from cookie string and dict (no browser required)."""
         utils.logger.info(
-            f"[KuaishouCrawler._create_client_for_session] Creating client for account '{session.account_id}'"
-        )
-        cookie_str, cookie_dict = utils.convert_cookies(
-            await session.browser_context.cookies()
+            f"[KuaishouCrawler._create_client_from_cookies] Creating client for account '{session.account_id}'"
         )
         client = KuaiShouClient(
             proxy=session.httpx_proxy,
@@ -127,7 +127,6 @@ class KuaishouCrawler(AbstractCrawler):
                 "Referer": self.index_url,
                 "Content-Type": "application/json;charset=UTF-8",
             },
-            playwright_page=session.context_page,
             cookie_dict=cookie_dict,
             proxy_ip_pool=session.proxy_ip_pool,
         )
@@ -328,88 +327,34 @@ class KuaishouCrawler(AbstractCrawler):
                 for task in current_running_tasks:
                     task.cancel()
                 time.sleep(20)
-                if _session:
-                    await _session.context_page.goto(f"{self.index_url}?isHome=1")
-                    await _session.api_client.update_cookies(
-                        browser_context=_session.browser_context
-                    )
+                utils.logger.error(
+                    "[KuaishouCrawler.get_comments] Blocked — cookie refresh via browser is not available in headless mode"
+                )
 
-    async def launch_browser(
+    async def _launch_browser(
         self,
-        chromium: BrowserType,
+        chromium,
         playwright_proxy: Optional[Dict],
         user_agent: Optional[str],
         headless: bool = True,
         account_id: str = "",
-    ) -> BrowserContext:
-        """Launch browser and create browser context"""
-        utils.logger.info(
-            "[KuaishouCrawler.launch_browser] Begin create browser context ..."
-        )
+    ):
+        """Launch browser for login only (Playwright is an optional dependency for headless crawling)."""
         if config.SAVE_LOGIN_STATE:
-            # Use account-specific user_data_dir for multi-account isolation
             dir_name = f"{config.PLATFORM}_{account_id}" if account_id else config.USER_DATA_DIR % config.PLATFORM
-            user_data_dir = os.path.join(
-                os.getcwd(), "browser_data", dir_name
-            )  # type: ignore
-            browser_context = await chromium.launch_persistent_context(
+            user_data_dir = os.path.join(os.getcwd(), "browser_data", dir_name)  # type: ignore
+            return await chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
                 accept_downloads=True,
                 headless=headless,
-                proxy=playwright_proxy,  # type: ignore
+                proxy=playwright_proxy,
                 viewport={"width": 1920, "height": 1080},
                 user_agent=user_agent,
-                channel="chrome",  # Use system's stable Chrome version
+                channel="chrome",
             )
-            return browser_context
         else:
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel="chrome")  # type: ignore
-            browser_context = await browser.new_context(
-                viewport={"width": 1920, "height": 1080}, user_agent=user_agent
-            )
-            return browser_context
-
-    async def launch_browser_with_cdp(
-        self,
-        playwright: Playwright,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-        account_id: str = "",
-    ) -> BrowserContext:
-        """
-        Launch browser using CDP mode
-        """
-        try:
-            cdp_manager = CDPBrowserManager()
-            browser_context = await cdp_manager.launch_and_connect(
-                playwright=playwright,
-                playwright_proxy=playwright_proxy,
-                user_agent=user_agent,
-                headless=headless,
-            )
-
-            # Display browser information
-            browser_info = await cdp_manager.get_browser_info()
-            utils.logger.info(f"[KuaishouCrawler] CDP browser info: {browser_info}")
-
-            # Store cdp_manager on the session for cleanup
-            for s in self.account_manager.sessions:
-                if s.account_id == account_id:
-                    s.cdp_manager = cdp_manager
-                    break
-
-            return browser_context
-
-        except Exception as e:
-            utils.logger.error(
-                f"[KuaishouCrawler] CDP mode launch failed, fallback to standard mode: {e}"
-            )
-            # Fallback to standard mode
-            chromium = playwright.chromium
-            return await self.launch_browser(
-                chromium, playwright_proxy, user_agent, headless, account_id
-            )
+            browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel="chrome")
+            return await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
 
     async def get_creators_and_videos(self, session: Optional[AccountSession] = None) -> None:
         """Get creator's videos and retrieve their comment information."""

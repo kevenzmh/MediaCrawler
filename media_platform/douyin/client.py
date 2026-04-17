@@ -24,7 +24,6 @@ import urllib.parse
 from typing import TYPE_CHECKING, Any, Callable, Dict, Union, Optional
 
 import httpx
-from playwright.async_api import BrowserContext
 
 from base.base_crawler import AbstractApiClient
 from proxy.proxy_mixin import ProxyRefreshMixin
@@ -44,11 +43,10 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
 
     def __init__(
         self,
-        timeout=60,  # If the crawl media option is turned on, Douyin’s short videos will require a longer timeout.
+        timeout=60,
         proxy=None,
         *,
         headers: Dict,
-        playwright_page: Optional[Page],
         cookie_dict: Dict,
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
@@ -56,7 +54,6 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         self.timeout = timeout
         self.headers = headers
         self._host = "https://www.douyin.com"
-        self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
@@ -72,7 +69,9 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         if not params:
             return
         headers = headers or self.headers
-        local_storage: Dict = await self.playwright_page.evaluate("() => window.localStorage")  # type: ignore
+        local_storage: Dict = {}
+        if self.playwright_page:
+            local_storage = await self.playwright_page.evaluate("() => window.localStorage")
         common_params = {
             "device_platform": "webapp",
             "aid": "6383",
@@ -99,7 +98,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             'effective_type': '4g',
             "round_trip_time": "50",
             "webid": get_web_id(),
-            "msToken": local_storage.get("xmst"),
+            "msToken": self.cookie_dict.get("msToken", "") or local_storage.get("xmst", ""),
         }
         params.update(common_params)
         query_string = urllib.parse.urlencode(params)
@@ -140,16 +139,21 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         headers = headers or self.headers
         return await self.request(method="POST", url=f"{self._host}{uri}", data=data, headers=headers)
 
-    async def pong(self, browser_context: BrowserContext) -> bool:
-        local_storage = await self.playwright_page.evaluate("() => window.localStorage")
-        if local_storage.get("HasUserLogin", "") == "1":
+    async def pong(self, browser_context=None) -> bool:
+        if self.playwright_page:
+            local_storage = await self.playwright_page.evaluate("() => window.localStorage")
+            if local_storage.get("HasUserLogin", "") == "1":
+                return True
+        # Cookie-based fallback
+        if self.cookie_dict.get("LOGIN_STATUS") == "1":
             return True
+        if browser_context:
+            _, cookie_dict = utils.convert_cookies(await browser_context.cookies())
+            if cookie_dict.get("LOGIN_STATUS") == "1":
+                return True
+        return False
 
-        _, cookie_dict = utils.convert_cookies(await browser_context.cookies())
-        return cookie_dict.get("LOGIN_STATUS") == "1"
-
-    async def update_cookies(self, browser_context: BrowserContext):
-        cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
+    async def update_cookies(self, cookie_str: str = "", cookie_dict: Optional[Dict] = None):
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
 

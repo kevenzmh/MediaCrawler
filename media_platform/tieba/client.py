@@ -227,18 +227,11 @@ class BaiduTieBaClient(AbstractApiClient):
             utils.logger.error(f"[BaiduTieBaClient.pong] Check login state failed: {e}, assume not logged in")
             return False
 
-    async def update_cookies(self, browser_context: BrowserContext):
-        """
-        Update cookies method provided by API client, usually called after successful login
-        Args:
-            browser_context: Browser context object
-
-        Returns:
-
-        """
-        cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
-        self.headers["Cookie"] = cookie_str
-        utils.logger.info("[BaiduTieBaClient.update_cookies] Cookie has been updated")
+    async def update_cookies(self, cookie_str: str = "", cookie_dict: Optional[Dict] = None):
+        if cookie_str:
+            self.headers["Cookie"] = cookie_str
+        if cookie_dict:
+            self.cookie_dict = cookie_dict
 
     async def get_notes_by_keyword(
         self,

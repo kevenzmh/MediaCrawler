@@ -25,7 +25,6 @@ from urllib.parse import urlencode
 
 import httpx
 from httpx import Response
-from playwright.async_api import BrowserContext, Page
 from tools.httpx_util import make_async_client
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -52,7 +51,6 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         proxy=None,
         *,
         headers: Dict[str, str],
-        playwright_page: Page,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
@@ -160,18 +158,20 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
             ping_flag = False
         return ping_flag
 
-    async def update_cookies(self, browser_context: BrowserContext):
+    async def update_cookies(self, cookie_str: str = "", cookie_dict: Optional[Dict] = None):
         """
         Update cookies method provided by API client, typically called after successful login
         Args:
-            browser_context: Browser context object
+            cookie_str: Cookie string to set in headers
+            cookie_dict: Cookie dictionary to store
 
         Returns:
 
         """
-        cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
-        self.default_headers["cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
+        if cookie_str:
+            self.default_headers["cookie"] = cookie_str
+        if cookie_dict:
+            self.cookie_dict = cookie_dict
 
     async def get_current_user_info(self) -> Dict:
         """

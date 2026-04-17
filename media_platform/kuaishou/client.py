@@ -25,8 +25,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from urllib.parse import urlencode
 
 import httpx
-from playwright.async_api import BrowserContext, Page
-
 import config
 from base.base_crawler import AbstractApiClient
 from proxy.proxy_mixin import ProxyRefreshMixin
@@ -47,7 +45,6 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         proxy=None,
         *,
         headers: Dict[str, str],
-        playwright_page: Page,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
@@ -56,7 +53,6 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         self.headers = headers
         self._host = "https://www.kuaishou.com/graphql"
         self._rest_host = "https://www.kuaishou.com"
-        self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
         self.graphql = KuaiShouGraphQL()
         # Initialize proxy pool (from ProxyRefreshMixin)
@@ -133,10 +129,11 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
             ping_flag = False
         return ping_flag
 
-    async def update_cookies(self, browser_context: BrowserContext):
-        cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
-        self.headers["Cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
+    async def update_cookies(self, cookie_str: str = "", cookie_dict: Optional[Dict] = None):
+        if cookie_str:
+            self.headers["Cookie"] = cookie_str
+        if cookie_dict:
+            self.cookie_dict = cookie_dict
 
     async def search_info_by_keyword(
         self, keyword: str, pcursor: str, search_session_id: str = ""

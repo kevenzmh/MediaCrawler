@@ -31,7 +31,6 @@ from urllib.parse import parse_qs, unquote, urlencode
 
 import httpx
 from httpx import Response
-from playwright.async_api import BrowserContext, Page
 from tools.httpx_util import make_async_client
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -50,11 +49,10 @@ class WeiboClient(ProxyRefreshMixin):
 
     def __init__(
         self,
-        timeout=60,  # If media crawling is enabled, Weibo images need a longer timeout
+        timeout=60,
         proxy=None,
         *,
         headers: Dict[str, str],
-        playwright_page: Page,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
@@ -62,7 +60,6 @@ class WeiboClient(ProxyRefreshMixin):
         self.timeout = timeout
         self.headers = headers
         self._host = "https://m.weibo.cn"
-        self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
         self._image_agent_host = "https://i1.wp.com/"
         # Initialize proxy pool (from ProxyRefreshMixin)
@@ -83,11 +80,7 @@ class WeiboClient(ProxyRefreshMixin):
         try:
             data: Dict = response.json()
         except json.decoder.JSONDecodeError:
-            # issue: #771 Search API returns error 432, retry multiple times + update h5 cookies
             utils.logger.error(f"[WeiboClient.request] request {method}:{url} err code: {response.status_code} res:{response.text}")
-            await self.playwright_page.goto(self._host)
-            await asyncio.sleep(2)
-            await self.update_cookies(browser_context=self.playwright_page.context)
             raise DataFetchError(f"get response code error: {response.status_code}")
 
         ok_code = data.get("ok")
@@ -130,24 +123,9 @@ class WeiboClient(ProxyRefreshMixin):
             ping_flag = False
         return ping_flag
 
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[List[str]] = None):
-        """
-        Update cookies from browser context
-        :param browser_context: Browser context
-        :param urls: Optional list of URLs to filter cookies (e.g., ["https://m.weibo.cn"])
-                     If provided, only cookies for these URLs will be retrieved
-        """
-        if urls:
-            cookies = await browser_context.cookies(urls=urls)
-            utils.logger.info(f"[WeiboClient.update_cookies] Updating cookies for specific URLs: {urls}")
-        else:
-            cookies = await browser_context.cookies()
-            utils.logger.info("[WeiboClient.update_cookies] Updating all cookies")
-
-        cookie_str, cookie_dict = utils.convert_cookies(cookies)
+    async def update_cookies(self, cookie_str: str = "", cookie_dict: Optional[Dict] = None):
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
-        utils.logger.info(f"[WeiboClient.update_cookies] Cookie updated successfully, total: {len(cookie_dict)} cookies")
 
     async def get_note_by_keyword(
         self,
