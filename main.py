@@ -119,7 +119,16 @@ async def main() -> None:
 async def async_cleanup() -> None:
     global crawler
     if crawler:
-        if getattr(crawler, "cdp_manager", None):
+        # Multi-account mode: use account_manager for cleanup
+        account_manager = getattr(crawler, "account_manager", None)
+        if account_manager:
+            try:
+                await account_manager.close_all()
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "closed" not in error_msg and "disconnected" not in error_msg:
+                    print(f"[Main] Error cleaning up account sessions: {e}")
+        elif getattr(crawler, "cdp_manager", None):
             try:
                 await crawler.cdp_manager.cleanup(force=True)
             except Exception as e:
@@ -144,6 +153,18 @@ if __name__ == "__main__":
     def _force_stop() -> None:
         c = crawler
         if not c:
+            return
+        # Multi-account mode: clean up all sessions' CDP managers
+        account_manager = getattr(c, "account_manager", None)
+        if account_manager:
+            for session in account_manager.sessions:
+                if session.cdp_manager:
+                    launcher = getattr(session.cdp_manager, "launcher", None)
+                    if launcher:
+                        try:
+                            launcher.cleanup()
+                        except Exception:
+                            pass
             return
         cdp_manager = getattr(c, "cdp_manager", None)
         launcher = getattr(cdp_manager, "launcher", None)

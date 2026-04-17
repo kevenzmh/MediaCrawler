@@ -1,0 +1,31 @@
+{
+  "_comment": "多账号配置文件。每个平台可配置多个账号，每个账号绑定独立代理IP。无此文件时自动回退单账号模式。",
+  "xhs": [
+    {
+      "account_id": "xhs_account_1",
+      "cookie_str": "",
+      "login_type": "qrcode",
+      "proxy": {
+        "ip": "",
+        "port": 0,
+        "user": "",
+        "password": ""
+      },
+      "enabled": true
+    }
+  ],
+  "dy": [
+    {
+      "account_id": "dy_account_1",
+      "cookie_str": "",
+      "login_type": "qrcode",
+      "proxy": null,
+      "enabled": true
+    }
+  ],
+  "bili": [],
+  "wb": [],
+  "ks": [],
+  "tieba": [],
+  "zhihu": []
+}

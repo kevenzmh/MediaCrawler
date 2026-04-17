@@ -40,28 +40,30 @@ class AbstractCrawler(ABC):
         pass
 
     @abstractmethod
-    async def launch_browser(self, chromium: BrowserType, playwright_proxy: Optional[Dict], user_agent: Optional[str], headless: bool = True) -> BrowserContext:
+    async def launch_browser(self, chromium: BrowserType, playwright_proxy: Optional[Dict], user_agent: Optional[str], headless: bool = True, account_id: str = "") -> BrowserContext:
         """
         launch browser
         :param chromium: chromium browser
         :param playwright_proxy: playwright proxy
         :param user_agent: user agent
         :param headless: headless mode
+        :param account_id: account identifier for multi-account user_data_dir
         :return: browser context
         """
         pass
 
-    async def launch_browser_with_cdp(self, playwright: Playwright, playwright_proxy: Optional[Dict], user_agent: Optional[str], headless: bool = True) -> BrowserContext:
+    async def launch_browser_with_cdp(self, playwright: Playwright, playwright_proxy: Optional[Dict], user_agent: Optional[str], headless: bool = True, account_id: str = "") -> BrowserContext:
         """
         Launch browser using CDP mode (optional implementation)
         :param playwright: playwright instance
         :param playwright_proxy: playwright proxy configuration
         :param user_agent: user agent
         :param headless: headless mode
+        :param account_id: account identifier for multi-account user_data_dir
         :return: browser context
         """
         # Default implementation: fallback to standard mode
-        return await self.launch_browser(playwright.chromium, playwright_proxy, user_agent, headless)
+        return await self.launch_browser(playwright.chromium, playwright_proxy, user_agent, headless, account_id)
 
 
 class AbstractLogin(ABC):

@@ -20,23 +20,21 @@
 
 import asyncio
 import os
-# import random  # Removed as we now use fixed config.CRAWLER_MAX_SLEEP_SEC intervals
 import time
 from asyncio import Task
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from playwright.async_api import (
     BrowserContext,
     BrowserType,
-    Page,
     Playwright,
     async_playwright,
 )
 
 import config
+from account import AccountManager, AccountSession
 from base.base_crawler import AbstractCrawler
-from model.m_kuaishou import VideoUrlInfo, CreatorUrlInfo
-from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
+from model.m_kuaishou import CreatorUrlInfo
 from store import kuaishou as kuaishou_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
@@ -50,84 +48,94 @@ from .login import KuaishouLogin
 
 
 class KuaishouCrawler(AbstractCrawler):
-    context_page: Page
-    ks_client: KuaiShouClient
-    browser_context: BrowserContext
-    cdp_manager: Optional[CDPBrowserManager]
 
     def __init__(self):
         self.index_url = "https://www.kuaishou.com"
         self.user_agent = utils.get_user_agent()
-        self.cdp_manager = None
-        self.ip_proxy_pool = None  # Proxy IP pool, used for automatic proxy refresh
+        self.account_manager = AccountManager()
 
     async def start(self):
-        playwright_proxy_format, httpx_proxy_format = None, None
-        if config.ENABLE_IP_PROXY:
-            self.ip_proxy_pool = await create_ip_pool(
-                config.IP_PROXY_POOL_COUNT, enable_validate_ip=True
-            )
-            ip_proxy_info: IpInfoModel = await self.ip_proxy_pool.get_proxy()
-            playwright_proxy_format, httpx_proxy_format = utils.format_proxy_info(
-                ip_proxy_info
-            )
-
         async with async_playwright() as playwright:
-            # Select startup mode based on configuration
-            if config.ENABLE_CDP_MODE:
-                utils.logger.info("[KuaishouCrawler] Launching browser using CDP mode")
-                self.browser_context = await self.launch_browser_with_cdp(
-                    playwright,
-                    playwright_proxy_format,
-                    self.user_agent,
-                    headless=config.CDP_HEADLESS,
-                )
-            else:
-                utils.logger.info("[KuaishouCrawler] Launching browser using standard mode")
-                # Launch a browser context.
-                chromium = playwright.chromium
-                self.browser_context = await self.launch_browser(
-                    chromium, None, self.user_agent, headless=config.HEADLESS
-                )
-                # stealth.min.js is a js script to prevent the website from detecting the crawler.
-                await self.browser_context.add_init_script(path="libs/stealth.min.js")
+            chromium = playwright.chromium
+            sessions = await self.account_manager.create_sessions(
+                platform=config.PLATFORM,
+                playwright=playwright,
+                chromium=chromium,
+                user_agent=self.user_agent,
+                launch_browser_fn=self.launch_browser,
+                launch_cdp_fn=self.launch_browser_with_cdp,
+                stealth_js_path="libs/stealth.min.js",
+                index_url=f"{self.index_url}?isHome=1",
+            )
 
-
-            self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(f"{self.index_url}?isHome=1")
-
-            # Create a client to interact with the kuaishou website.
-            self.ks_client = await self.create_ks_client(httpx_proxy_format)
-            if not await self.ks_client.pong():
-                login_obj = KuaishouLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone=httpx_proxy_format,
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=config.COOKIES,
-                )
-                await login_obj.begin()
-                await self.ks_client.update_cookies(
-                    browser_context=self.browser_context
-                )
+            # Login and create client for each session
+            for session in sessions:
+                session.api_client = await self._create_client_for_session(session)
+                if not await session.api_client.pong():
+                    login_obj = KuaishouLogin(
+                        login_type=session.login_type,
+                        login_phone="",
+                        browser_context=session.browser_context,
+                        context_page=session.context_page,
+                        cookie_str=session.cookie_str,
+                    )
+                    await login_obj.begin()
+                    await session.api_client.update_cookies(
+                        browser_context=session.browser_context
+                    )
 
             crawler_type_var.set(config.CRAWLER_TYPE)
-            if config.CRAWLER_TYPE == "search":
-                # Search for videos and retrieve their comment information.
-                await self.search()
-            elif config.CRAWLER_TYPE == "detail":
-                # Get the information and comments of the specified post
-                await self.get_specified_videos()
-            elif config.CRAWLER_TYPE == "creator":
-                # Get creator's information and their videos and comments
-                await self.get_creators_and_videos()
-            else:
-                pass
 
+            # Run crawl tasks in parallel across accounts
+            semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+            tasks = [
+                self._crawl_with_session(session, semaphore)
+                for session in sessions
+            ]
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await self.account_manager.close_all()
             utils.logger.info("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
 
-    async def search(self):
+    async def _crawl_with_session(self, session: AccountSession, semaphore: asyncio.Semaphore):
+        """Run crawl logic for a single account session."""
+        try:
+            if config.CRAWLER_TYPE == "search":
+                await self.search(session)
+            elif config.CRAWLER_TYPE == "detail":
+                await self.get_specified_videos(session)
+            elif config.CRAWLER_TYPE == "creator":
+                await self.get_creators_and_videos(session)
+        except Exception as ex:
+            utils.logger.error(
+                f"[KuaishouCrawler._crawl_with_session] Account '{session.account_id}' error: {ex}"
+            )
+
+    async def _create_client_for_session(self, session: AccountSession) -> KuaiShouClient:
+        """Create KuaiShou client for a specific account session."""
+        utils.logger.info(
+            f"[KuaishouCrawler._create_client_for_session] Creating client for account '{session.account_id}'"
+        )
+        cookie_str, cookie_dict = utils.convert_cookies(
+            await session.browser_context.cookies()
+        )
+        client = KuaiShouClient(
+            proxy=session.httpx_proxy,
+            headers={
+                "User-Agent": self.user_agent,
+                "Cookie": cookie_str,
+                "Origin": self.index_url,
+                "Referer": self.index_url,
+                "Content-Type": "application/json;charset=UTF-8",
+            },
+            playwright_page=session.context_page,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=session.proxy_ip_pool,
+        )
+        return client
+
+    async def search(self, session: Optional[AccountSession] = None):
         utils.logger.info("[KuaishouCrawler.search] Begin search kuaishou keywords")
+        client = session.api_client if session else self.account_manager.sessions[0].api_client
         ks_limit_count = 20  # kuaishou limit page fixed value
         if config.CRAWLER_MAX_NOTES_COUNT < ks_limit_count:
             config.CRAWLER_MAX_NOTES_COUNT = ks_limit_count
@@ -159,7 +167,7 @@ class KuaishouCrawler(AbstractCrawler):
                     f"[KuaishouCrawler.search] search kuaishou keyword: {keyword}, page: {page}"
                 )
                 video_id_list: List[str] = []
-                videos_res = await self.ks_client.search_info_by_keyword(
+                videos_res = await client.search_info_by_keyword(
                     keyword=keyword,
                     pcursor=str(page),
                     search_session_id=search_session_id,
@@ -191,7 +199,7 @@ class KuaishouCrawler(AbstractCrawler):
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                 utils.logger.info(f"[KuaishouCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
 
-                await self.batch_get_video_comments(video_id_list)
+                await self.batch_get_video_comments(video_id_list, session=session)
 
             # 关键词爬完，标记 completed
             checkpoint.mark_keyword_completed(keyword)
@@ -199,8 +207,9 @@ class KuaishouCrawler(AbstractCrawler):
         # 全部完成，清理 checkpoint
         checkpoint.clear_checkpoint()
 
-    async def get_specified_videos(self):
+    async def get_specified_videos(self, session: Optional[AccountSession] = None):
         """Get the information and comments of the specified post"""
+        client = session.api_client if session else self.account_manager.sessions[0].api_client
         utils.logger.info("[KuaishouCrawler.get_specified_videos] Parsing video URLs...")
         video_ids = []
         for video_url in config.KS_SPECIFIED_ID_LIST:
@@ -214,22 +223,23 @@ class KuaishouCrawler(AbstractCrawler):
 
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [
-            self.get_video_info_task(video_id=video_id, semaphore=semaphore)
+            self.get_video_info_task(video_id=video_id, semaphore=semaphore, client=client)
             for video_id in video_ids
         ]
         video_details = await asyncio.gather(*task_list)
         for video_detail in video_details:
             if video_detail is not None:
                 await kuaishou_store.update_kuaishou_video(video_detail)
-        await self.batch_get_video_comments(video_ids)
+        await self.batch_get_video_comments(video_ids, session=session)
 
     async def get_video_info_task(
-        self, video_id: str, semaphore: asyncio.Semaphore
+        self, video_id: str, semaphore: asyncio.Semaphore, client: Optional[KuaiShouClient] = None
     ) -> Optional[Dict]:
         """Get video detail task"""
+        _client = client or self.account_manager.sessions[0].api_client
         async with semaphore:
             try:
-                result = await self.ks_client.get_video_info(video_id)
+                result = await _client.get_video_info(video_id)
 
                 # Sleep after fetching video details
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
@@ -250,12 +260,14 @@ class KuaishouCrawler(AbstractCrawler):
                 )
                 return None
 
-    async def batch_get_video_comments(self, video_id_list: List[str]):
+    async def batch_get_video_comments(self, video_id_list: List[str], session: Optional[AccountSession] = None):
         """
         batch get video comments
         :param video_id_list:
+        :param session: Account session for multi-account support
         :return:
         """
+        _session = session or (self.account_manager.sessions[0] if self.account_manager.sessions else None)
         if not config.ENABLE_GET_COMMENTS:
             utils.logger.info(
                 f"[KuaishouCrawler.batch_get_video_comments] Crawling comment mode is not enabled"
@@ -269,20 +281,23 @@ class KuaishouCrawler(AbstractCrawler):
         task_list: List[Task] = []
         for video_id in video_id_list:
             task = asyncio.create_task(
-                self.get_comments(video_id, semaphore), name=video_id
+                self.get_comments(video_id, semaphore, session=_session), name=video_id
             )
             task_list.append(task)
 
         comment_tasks_var.set(task_list)
         await asyncio.gather(*task_list)
 
-    async def get_comments(self, video_id: str, semaphore: asyncio.Semaphore):
+    async def get_comments(self, video_id: str, semaphore: asyncio.Semaphore, session: Optional[AccountSession] = None):
         """
         get comment for video id
         :param video_id:
         :param semaphore:
+        :param session: Account session for multi-account support
         :return:
         """
+        _session = session or (self.account_manager.sessions[0] if self.account_manager.sessions else None)
+        _client = _session.api_client if _session else self.account_manager.sessions[0].api_client
         async with semaphore:
             try:
                 utils.logger.info(
@@ -293,7 +308,7 @@ class KuaishouCrawler(AbstractCrawler):
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                 utils.logger.info(f"[KuaishouCrawler.get_comments] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds before fetching comments for video {video_id}")
 
-                await self.ks_client.get_video_all_comments(
+                await _client.get_video_all_comments(
                     photo_id=video_id,
                     crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
                     callback=kuaishou_store.batch_update_ks_video_comments,
@@ -307,39 +322,17 @@ class KuaishouCrawler(AbstractCrawler):
                 utils.logger.error(
                     f"[KuaishouCrawler.get_comments] may be been blocked, err:{e}"
                 )
-                # use time.sleeep block main coroutine instead of asyncio.sleep and cacel running comment task
+                # use time.sleep block main coroutine instead of asyncio.sleep and cancel running comment task
                 # maybe kuaishou block our request, we will take a nap and update the cookie again
                 current_running_tasks = comment_tasks_var.get()
                 for task in current_running_tasks:
                     task.cancel()
                 time.sleep(20)
-                await self.context_page.goto(f"{self.index_url}?isHome=1")
-                await self.ks_client.update_cookies(
-                    browser_context=self.browser_context
-                )
-
-    async def create_ks_client(self, httpx_proxy: Optional[str]) -> KuaiShouClient:
-        """Create ks client"""
-        utils.logger.info(
-            "[KuaishouCrawler.create_ks_client] Begin create kuaishou API client ..."
-        )
-        cookie_str, cookie_dict = utils.convert_cookies(
-            await self.browser_context.cookies()
-        )
-        ks_client_obj = KuaiShouClient(
-            proxy=httpx_proxy,
-            headers={
-                "User-Agent": self.user_agent,
-                "Cookie": cookie_str,
-                "Origin": self.index_url,
-                "Referer": self.index_url,
-                "Content-Type": "application/json;charset=UTF-8",
-            },
-            playwright_page=self.context_page,
-            cookie_dict=cookie_dict,
-            proxy_ip_pool=self.ip_proxy_pool,  # Pass proxy pool for automatic refresh
-        )
-        return ks_client_obj
+                if _session:
+                    await _session.context_page.goto(f"{self.index_url}?isHome=1")
+                    await _session.api_client.update_cookies(
+                        browser_context=_session.browser_context
+                    )
 
     async def launch_browser(
         self,
@@ -347,14 +340,17 @@ class KuaishouCrawler(AbstractCrawler):
         playwright_proxy: Optional[Dict],
         user_agent: Optional[str],
         headless: bool = True,
+        account_id: str = "",
     ) -> BrowserContext:
         """Launch browser and create browser context"""
         utils.logger.info(
             "[KuaishouCrawler.launch_browser] Begin create browser context ..."
         )
         if config.SAVE_LOGIN_STATE:
+            # Use account-specific user_data_dir for multi-account isolation
+            dir_name = f"{config.PLATFORM}_{account_id}" if account_id else config.USER_DATA_DIR % config.PLATFORM
             user_data_dir = os.path.join(
-                os.getcwd(), "browser_data", config.USER_DATA_DIR % config.PLATFORM
+                os.getcwd(), "browser_data", dir_name
             )  # type: ignore
             browser_context = await chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
@@ -379,13 +375,14 @@ class KuaishouCrawler(AbstractCrawler):
         playwright_proxy: Optional[Dict],
         user_agent: Optional[str],
         headless: bool = True,
+        account_id: str = "",
     ) -> BrowserContext:
         """
         Launch browser using CDP mode
         """
         try:
-            self.cdp_manager = CDPBrowserManager()
-            browser_context = await self.cdp_manager.launch_and_connect(
+            cdp_manager = CDPBrowserManager()
+            browser_context = await cdp_manager.launch_and_connect(
                 playwright=playwright,
                 playwright_proxy=playwright_proxy,
                 user_agent=user_agent,
@@ -393,8 +390,14 @@ class KuaishouCrawler(AbstractCrawler):
             )
 
             # Display browser information
-            browser_info = await self.cdp_manager.get_browser_info()
+            browser_info = await cdp_manager.get_browser_info()
             utils.logger.info(f"[KuaishouCrawler] CDP browser info: {browser_info}")
+
+            # Store cdp_manager on the session for cleanup
+            for s in self.account_manager.sessions:
+                if s.account_id == account_id:
+                    s.cdp_manager = cdp_manager
+                    break
 
             return browser_context
 
@@ -405,11 +408,12 @@ class KuaishouCrawler(AbstractCrawler):
             # Fallback to standard mode
             chromium = playwright.chromium
             return await self.launch_browser(
-                chromium, playwright_proxy, user_agent, headless
+                chromium, playwright_proxy, user_agent, headless, account_id
             )
 
-    async def get_creators_and_videos(self) -> None:
+    async def get_creators_and_videos(self, session: Optional[AccountSession] = None) -> None:
         """Get creator's videos and retrieve their comment information."""
+        client = session.api_client if session else self.account_manager.sessions[0].api_client
         utils.logger.info(
             "[KuaiShouCrawler.get_creators_and_videos] Begin get kuaishou creators"
         )
@@ -421,7 +425,7 @@ class KuaishouCrawler(AbstractCrawler):
                 user_id = creator_info.user_id
 
                 # get creator detail info from web html content
-                createor_info: Dict = await self.ks_client.get_creator_info(user_id=user_id)
+                createor_info: Dict = await client.get_creator_info(user_id=user_id)
                 if createor_info:
                     await kuaishou_store.save_creator(user_id, creator=createor_info)
             except ValueError as e:
@@ -429,7 +433,7 @@ class KuaishouCrawler(AbstractCrawler):
                 continue
 
             # Get all video information of the creator
-            all_video_list = await self.ks_client.get_all_videos_by_creator(
+            all_video_list = await client.get_all_videos_by_creator(
                 user_id=user_id,
                 crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
                 callback=self.fetch_creator_video_detail,
@@ -438,7 +442,7 @@ class KuaishouCrawler(AbstractCrawler):
             video_ids = [
                 video_item.get("photo", {}).get("id") for video_item in all_video_list
             ]
-            await self.batch_get_video_comments(video_ids)
+            await self.batch_get_video_comments(video_ids, session=session)
 
     async def fetch_creator_video_detail(self, video_list: List[Dict]):
         """
@@ -456,11 +460,6 @@ class KuaishouCrawler(AbstractCrawler):
                 await kuaishou_store.update_kuaishou_video(video_detail)
 
     async def close(self):
-        """Close browser context"""
-        # If using CDP mode, need special handling
-        if self.cdp_manager:
-            await self.cdp_manager.cleanup()
-            self.cdp_manager = None
-        else:
-            await self.browser_context.close()
-        utils.logger.info("[KuaishouCrawler.close] Browser context closed ...")
+        """Close all browser contexts"""
+        await self.account_manager.close_all()
+        utils.logger.info("[KuaishouCrawler.close] All browser contexts closed ...")
