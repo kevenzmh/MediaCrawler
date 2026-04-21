@@ -50,11 +50,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxcomposite1 \
         libxdamage1 \
         libxrandr2 \
+        libxfixes3 \
         libgbm1 \
         libpango-1.0-0 \
         libcairo2 \
         libasound2 \
         libatspi2.0-0 \
+        libgl1 \
         fonts-liberation \
         fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
@@ -71,9 +73,13 @@ WORKDIR /app
 COPY --from=builder /build/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Set Playwright browsers path to a shared location (accessible by non-root user)
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+
 # Install Playwright browsers with system deps
-# (system deps already installed above, this just downloads chromium)
-RUN uv run playwright install chromium
+# Use python -m playwright because uv generates shebangs with build-stage paths
+RUN /app/.venv/bin/python -m playwright install chromium && \
+    chmod -R 755 /opt/playwright-browsers
 
 # Copy application code
 COPY --chown=crawler:crawler . /app

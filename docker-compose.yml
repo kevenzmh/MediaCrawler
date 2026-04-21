@@ -39,14 +39,15 @@ services:
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-5-20250514}
       # 数据库连接 (如使用 db/sqlite/postgres 存储)
       - SAVE_DATA_OPTION=${SAVE_DATA_OPTION:-jsonl}
-      - DB_HOST=${DB_HOST:-mysql}
-      - DB_PORT=${DB_PORT:-3306}
-      - DB_USER=${DB_USER:-mediacrawler}
-      - DB_PASSWORD=${DB_PASSWORD:-mediacrawler}
-      - DB_NAME=${DB_NAME:-mediacrawler}
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017}
+      - MYSQL_DB_HOST=${MYSQL_DB_HOST:-mysql}
+      - MYSQL_DB_PORT=${MYSQL_DB_PORT:-3306}
+      - MYSQL_DB_USER=${MYSQL_DB_USER:-mediacrawler}
+      - MYSQL_DB_PWD=${MYSQL_DB_PWD:-mediacrawler}
+      - MYSQL_DB_NAME=${MYSQL_DB_NAME:-media_crawler}
+      - REDIS_DB_HOST=${REDIS_DB_HOST:-redis}
+      - REDIS_DB_PORT=${REDIS_DB_PORT:-6379}
+      - MONGODB_HOST=${MONGODB_HOST:-mongo}
+      - MONGODB_PORT=${MONGODB_PORT:-27017}
     volumes:
       - ./data:/app/data
       - ./browser_data:/app/browser_data
@@ -59,13 +60,8 @@ services:
     #   - "8080:8080"
     # 默认运行爬虫,如需启动 API 请覆盖 command
     # command: ["-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      mongo:
-        condition: service_started
+    # depends_on 仅在 db/full profile 中生效 (通过 .env 控制)
+    # 如需等待数据库就绪,可在此添加 condition: service_healthy
     profiles:
       - db
       - full
