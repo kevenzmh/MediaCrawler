@@ -38,9 +38,11 @@ from tools import utils
 if TYPE_CHECKING:
     from proxy.proxy_ip_pool import ProxyIpPool
 
+from sign_service import get_sign_service
+from sign_service.providers.bilibili_provider import BilibiliSignProvider
+
 from .exception import DataFetchError
 from .field import CommentOrderType, SearchOrderType
-from .help import BilibiliSign
 
 
 class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
@@ -61,6 +63,7 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         self.cookie_dict = cookie_dict
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
+        self._sign_service = get_sign_service("bilibili")
 
     async def request(self, method, url, **kwargs) -> Any:
         # Check if proxy has expired before each request
@@ -89,7 +92,11 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         if not req_data:
             return {}
         img_key, sub_key = await self.get_wbi_keys()
-        return BilibiliSign(img_key, sub_key).sign(req_data)
+        provider = self._sign_service.provider
+        if isinstance(provider, BilibiliSignProvider):
+            provider.update_keys(img_key, sub_key)
+        result = self._sign_service.sign(uri="/wbi", params=req_data)
+        return result.params
 
     async def get_wbi_keys(self) -> Tuple[str, str]:
         """Get the latest img_key and sub_key via API."""

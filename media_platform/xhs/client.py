@@ -29,6 +29,7 @@ from tools.httpx_util import make_async_client
 import config
 from base.base_crawler import AbstractApiClient
 from proxy.proxy_mixin import ProxyRefreshMixin
+from sign_service import get_sign_service
 from tools import utils
 
 if TYPE_CHECKING:
@@ -38,7 +39,6 @@ from .exception import DataFetchError, IPBlockError, NoteNotFoundError
 from .field import SearchNoteType, SearchSortType
 from .help import get_search_id
 from .extractor import XiaoHongShuExtractor
-from .playwright_sign import sign_with_xhshow
 
 
 class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
@@ -70,9 +70,10 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         self._extractor = XiaoHongShuExtractor()
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
+        self._sign_service = get_sign_service("xhs")
 
     async def _pre_headers(self, url: str, params: Optional[Dict] = None, payload: Optional[Dict] = None) -> Dict:
-        """请求头参数签名 (使用 xhshow 纯算法)
+        """请求头参数签名 (使用签名服务)
 
         Args:
             url: 请求 URI path
@@ -83,29 +84,20 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             Dict: 签名后的请求头参数
         """
         if params is not None:
-            data = params
             method = "GET"
         elif payload is not None:
-            data = payload
             method = "POST"
         else:
             raise ValueError("params or payload is required")
 
-        # 使用 xhshow 纯算法生成签名
-        signs = sign_with_xhshow(
+        sign_result = self._sign_service.sign(
             uri=url,
-            data=data,
-            cookie_str=self.headers.get("Cookie", ""),
             method=method,
+            params=params if method == "GET" else None,
+            data=payload if method == "POST" else None,
+            cookie_str=self.headers.get("Cookie", ""),
         )
-
-        headers = {
-            "X-S": signs["x-s"],
-            "X-T": signs["x-t"],
-            "x-S-Common": signs["x-s-common"],
-            "X-B3-Traceid": signs["x-b3-traceid"],
-        }
-        self.headers.update(headers)
+        self.headers.update(sign_result.headers)
         return self.headers
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), retry=retry_if_not_exception_type(NoteNotFoundError))

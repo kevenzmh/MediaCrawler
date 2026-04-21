@@ -141,6 +141,13 @@ DISABLE_SSL_VERIFY = False
 # 中断后再次启动相同任务时，会自动从上次进度恢复，跳过已爬取的页码
 ENABLE_CHECKPOINT = True
 
+# ==================== 签名服务配置 ====================
+# 签名服务模式: "local" 使用本地签名算法 | "remote" 调用远程签名服务
+SIGN_SERVICE_MODE = "local"
+# 远程签名服务地址，SIGN_SERVICE_MODE="remote" 时生效
+# 示例: "http://sign-server:8080/sign"
+SIGN_SERVICE_URL = ""
+
 from .bilibili_config import *
 from .xhs_config import *
 from .dy_config import *

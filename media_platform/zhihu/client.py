@@ -38,9 +38,11 @@ from tools import utils
 if TYPE_CHECKING:
     from proxy.proxy_ip_pool import ProxyIpPool
 
+from sign_service import get_sign_service
+
 from .exception import DataFetchError, ForbiddenError
 from .field import SearchSort, SearchTime, SearchType
-from .help import ZhihuExtractor, sign
+from .help import ZhihuExtractor
 
 
 class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
@@ -61,6 +63,7 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         self._extractor = ZhihuExtractor()
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
+        self._sign_service = get_sign_service("zhihu")
 
     async def _pre_headers(self, url: str) -> Dict:
         """
@@ -73,10 +76,11 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         d_c0 = self.cookie_dict.get("d_c0")
         if not d_c0:
             raise Exception("d_c0 not found in cookies")
-        sign_res = sign(url, self.default_headers["cookie"])
+        sign_result = self._sign_service.sign(
+            uri=url, cookie_str=self.default_headers["cookie"],
+        )
         headers = self.default_headers.copy()
-        headers['x-zst-81'] = sign_res["x-zst-81"]
-        headers['x-zse-96'] = sign_res["x-zse-96"]
+        headers.update(sign_result.headers)
         return headers
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(1))

@@ -27,6 +27,7 @@ import httpx
 
 from base.base_crawler import AbstractApiClient
 from proxy.proxy_mixin import ProxyRefreshMixin
+from sign_service import get_sign_service
 from tools import utils
 from tools.httpx_util import make_async_client
 from var import request_keyword_var
@@ -57,6 +58,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         self.cookie_dict = cookie_dict
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
+        self._sign_service = get_sign_service("douyin")
 
     async def __process_req_params(
         self,
@@ -101,16 +103,15 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             "msToken": self.cookie_dict.get("msToken", "") or local_storage.get("xmst", ""),
         }
         params.update(common_params)
-        query_string = urllib.parse.urlencode(params)
-
-        # 20240927 a-bogus update (JS version)
-        post_data = {}
-        if request_method == "POST":
-            post_data = params
 
         if "/v1/web/general/search" not in uri:
-            a_bogus = await get_a_bogus(uri, query_string, post_data, headers["User-Agent"], self.playwright_page)
-            params["a_bogus"] = a_bogus
+            sign_result = self._sign_service.sign(
+                uri=uri,
+                method=request_method,
+                params=params,
+                headers=headers,
+            )
+            params.update(sign_result.params)
 
     async def request(self, method, url, **kwargs):
         # Check whether the proxy has expired before each request
