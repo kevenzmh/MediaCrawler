@@ -389,3 +389,19 @@ class WeiboClient(ProxyRefreshMixin):
             crawler_total_count += 10
             notes_has_more = notes_res.get("cardlistInfo", {}).get("total", 0) > crawler_total_count
         return result
+
+    async def get_homefeed_posts(
+        self,
+        feed_type: str = "102803",
+        since_id: str = "",
+        page: int = 1,
+    ) -> Dict:
+        """获取微博首页信息流"""
+        uri = "/api/container/getIndex"
+        params = {
+            "containerid": feed_type,
+            "page": page,
+        }
+        if since_id:
+            params["since_id"] = since_id
+        return await self.get(uri, params)

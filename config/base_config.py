@@ -100,6 +100,10 @@ CRAWLER_MAX_NOTES_COUNT = 15
 # Controlling the number of concurrent crawlers
 MAX_CONCURRENCY_NUM = 1
 
+# HomeFeed information flow configuration
+FEED_CATEGORY = "recommend"  # HomeFeed category, different platforms have different categories
+FEED_MAX_PAGES = 5  # Maximum number of HomeFeed pages to crawl
+
 # Whether to enable crawling media mode (including image or video resources), crawling media is not enabled by default
 ENABLE_GET_MEIDAS = True
 
@@ -147,6 +151,18 @@ SIGN_SERVICE_MODE = "local"
 # 远程签名服务地址，SIGN_SERVICE_MODE="remote" 时生效
 # 示例: "http://sign-server:8080/sign"
 SIGN_SERVICE_URL = ""
+
+# ==================== AI Agent 配置 ====================
+# 是否启用内容拆解 Agent (使用 Claude API 对爬取内容进行结构化分析)
+ENABLE_CONTENT_AGENT = False
+# 是否启用评论分析 Agent (使用 Claude API 对评论进行情感/主题/洞察分析)
+ENABLE_COMMENT_AGENT = False
+# Claude API 密钥 (从 https://console.anthropic.com/ 获取)
+CLAUDE_API_KEY = ""
+# Claude 模型选择
+CLAUDE_MODEL = "claude-sonnet-4-5-20250514"
+# Agent 并发数
+CLAUDE_MAX_CONCURRENT = 3
 
 from .bilibili_config import *
 from .xhs_config import *

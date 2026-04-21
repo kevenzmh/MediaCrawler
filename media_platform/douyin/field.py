@@ -41,3 +41,10 @@ class PublishTimeType(Enum):
     ONE_DAY = 1  # Within one day
     ONE_WEEK = 7  # Within one week
     SIX_MONTH = 180  # Within six months
+
+
+class FeedType(Enum):
+    """feed type for home feed recommendations"""
+    RECOMMEND = "0"  # 推荐
+    HOT = "1"  # 热点
+    LOCAL = "2"  # 本地

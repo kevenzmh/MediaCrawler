@@ -102,6 +102,8 @@ class BilibiliCrawler(AbstractCrawler):
                             continue
                 else:
                     await self.get_all_creator_details(config.BILI_CREATOR_ID_LIST, session)
+            elif config.CRAWLER_TYPE == "feed":
+                await self.feed(session)
         except Exception as ex:
             utils.logger.error(
                 f"[BilibiliCrawler._crawl_with_session] Account '{session.account_id}' error: {ex}"
@@ -699,3 +701,55 @@ class BilibiliCrawler(AbstractCrawler):
                 utils.logger.error(f"[BilibiliCrawler.get_dynamics] get creator_id: {creator_id} dynamics error: {ex}")
             except Exception as e:
                 utils.logger.error(f"[BilibiliCrawler.get_dynamics] may be been blocked, err:{e}")
+
+    async def feed(self, session: Optional[AccountSession] = None) -> None:
+        """Crawl bilibili home feed (popular/recommend) videos."""
+        client = session.api_client if session else self.account_manager.sessions[0].api_client
+        utils.logger.info(f"[BilibiliCrawler.feed] Begin crawl bilibili home feed (account: {session.account_id if session else 'default'})")
+
+        feed_category = config.FEED_CATEGORY.lower()
+        feed_type = "popular" if feed_category in ("popular", "hot") else "recommend"
+        utils.logger.info(f"[BilibiliCrawler.feed] Feed category: {feed_category}, feed type: {feed_type}")
+
+        total_count = 0
+        max_pages = config.FEED_MAX_PAGES
+
+        for pn in range(1, max_pages + 1):
+            try:
+                utils.logger.info(f"[BilibiliCrawler.feed] Crawling home feed page {pn}")
+                feed_res = await client.get_homefeed_videos(feed_type=feed_type, pn=pn, ps=20)
+
+                items = []
+                if feed_type == "popular":
+                    items = feed_res.get("list", [])
+                else:
+                    items = feed_res.get("data", {}).get("item", []) if feed_res else []
+
+                if not items:
+                    utils.logger.info("[BilibiliCrawler.feed] No more feed videos")
+                    break
+
+                bvid_list = []
+                for item in items:
+                    bvid = item.get("bvid", "")
+                    if bvid:
+                        await bilibili_store.update_bilibili_video(item)
+                        bvid_list.append(bvid)
+                        total_count += 1
+
+                # Get comments for feed videos
+                if config.ENABLE_GET_COMMENTS:
+                    semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+                    task_list = [
+                        self.get_comments(video_id=bvid, semaphore=semaphore, client=client)
+                        for bvid in bvid_list
+                    ]
+                    await asyncio.gather(*task_list)
+
+                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+                utils.logger.info(f"[BilibiliCrawler.feed] Page {pn} done, total: {total_count}")
+            except Exception as e:
+                utils.logger.error(f"[BilibiliCrawler.feed] Error on page {pn}: {e}")
+                break
+
+        utils.logger.info(f"[BilibiliCrawler.feed] Home feed crawl finished, total videos: {total_count}")

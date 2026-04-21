@@ -35,9 +35,10 @@ from var import crawler_type_var, source_keyword_var
 
 from .client import XiaoHongShuClient
 from .exception import DataFetchError, NoteNotFoundError
-from .field import SearchSortType
+from .field import FeedType, SearchSortType
 from .help import parse_note_info_from_note_url, parse_creator_info_from_url, get_search_id
 from .login import XiaoHongShuLogin
+from agent.runner import analyze_comments
 
 
 class XiaoHongShuCrawler(AbstractCrawler):
@@ -109,6 +110,8 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 await self.get_specified_notes(session)
             elif config.CRAWLER_TYPE == "creator":
                 await self.get_creators_and_notes(session)
+            elif config.CRAWLER_TYPE == "feed":
+                await self.feed(session)
         except Exception as ex:
             utils.logger.error(
                 f"[XiaoHongShuCrawler._crawl_with_session] Account '{session.account_id}' error: {ex}"
@@ -302,6 +305,94 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 await self.get_notice_media(note_detail, client)
         await self.batch_get_note_comments(need_get_comment_note_ids, xsec_tokens, client)
 
+    async def feed(self, session: Optional[AccountSession] = None) -> None:
+        """Crawl home feed recommendation notes."""
+        client = session.api_client if session else self.account_manager.sessions[0].api_client
+        utils.logger.info(f"[XiaoHongShuCrawler.feed] Begin crawl home feed (account: {session.account_id if session else 'default'})")
+
+        # Map feed_category string to FeedType enum
+        feed_category = config.FEED_CATEGORY.lower()
+        feed_type_map = {
+            "recommend": FeedType.RECOMMEND,
+            "fashion": FeedType.FASION,
+            "food": FeedType.FOOD,
+            "cosmetics": FeedType.COSMETICS,
+            "movie": FeedType.MOVIE,
+            "career": FeedType.CAREER,
+            "emotion": FeedType.EMOTION,
+            "hourse": FeedType.HOURSE,
+            "game": FeedType.GAME,
+            "travel": FeedType.TRAVEL,
+            "fitness": FeedType.FITNESS,
+        }
+        feed_type = feed_type_map.get(feed_category, FeedType.RECOMMEND)
+        utils.logger.info(f"[XiaoHongShuCrawler.feed] Feed category: {feed_category}, feed type: {feed_type.value}")
+
+        cursor = ""
+        total_count = 0
+        max_pages = config.FEED_MAX_PAGES
+        limit = 20
+
+        for page in range(1, max_pages + 1):
+            try:
+                utils.logger.info(f"[XiaoHongShuCrawler.feed] Crawling home feed page {page}, cursor: {cursor}")
+                feed_res = await client.get_homefeed_notes(
+                    feed_type=feed_type,
+                    cursor=cursor,
+                    limit=limit,
+                )
+                utils.logger.info(f"[XiaoHongShuCrawler.feed] Home feed response: has_more={feed_res.get('has_more', False)}")
+
+                if not feed_res or not feed_res.get("items"):
+                    utils.logger.info("[XiaoHongShuCrawler.feed] No more feed items")
+                    break
+
+                note_ids: List[str] = []
+                xsec_tokens: List[str] = []
+                items = feed_res.get("items", [])
+
+                semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+                task_list = [
+                    self.get_note_detail_async_task(
+                        note_id=item.get("id") or item.get("note_id"),
+                        xsec_source=item.get("xsec_source", "pc_feed"),
+                        xsec_token=item.get("xsec_token", ""),
+                        semaphore=semaphore,
+                        client=client,
+                    )
+                    for item in items
+                    if item.get("id") or item.get("note_id")
+                ]
+                note_details = await asyncio.gather(*task_list)
+
+                for note_detail in note_details:
+                    if note_detail:
+                        await xhs_store.update_xhs_note(note_detail)
+                        await self.get_notice_media(note_detail, client)
+                        note_ids.append(note_detail.get("note_id"))
+                        xsec_tokens.append(note_detail.get("xsec_token"))
+                        total_count += 1
+
+                await self.batch_get_note_comments(note_ids, xsec_tokens, client)
+
+                cursor = feed_res.get("cursor", "")
+                has_more = feed_res.get("has_more", False)
+                if not has_more:
+                    utils.logger.info("[XiaoHongShuCrawler.feed] Home feed has no more items")
+                    break
+
+                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+                utils.logger.info(f"[XiaoHongShuCrawler.feed] Page {page} done, sleeping for {config.CRAWLER_MAX_SLEEP_SEC}s")
+
+            except DataFetchError as e:
+                utils.logger.error(f"[XiaoHongShuCrawler.feed] Failed to get home feed page {page}: {e}")
+                break
+            except Exception as e:
+                utils.logger.error(f"[XiaoHongShuCrawler.feed] Unexpected error on page {page}: {e}")
+                break
+
+        utils.logger.info(f"[XiaoHongShuCrawler.feed] Home feed crawl finished, total notes: {total_count}")
+
     async def get_note_detail_async_task(
         self,
         note_id: str,
@@ -368,13 +459,20 @@ class XiaoHongShuCrawler(AbstractCrawler):
         async with semaphore:
             utils.logger.info(f"[XiaoHongShuCrawler.get_comments] Begin get note id comments {note_id}")
             crawl_interval = config.CRAWLER_MAX_SLEEP_SEC
-            await _client.get_note_all_comments(
+            all_comments = await _client.get_note_all_comments(
                 note_id=note_id,
                 xsec_token=xsec_token,
                 crawl_interval=crawl_interval,
                 callback=xhs_store.batch_update_xhs_note_comments,
                 max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
             )
+
+            # AI comment analysis (if enabled)
+            if config.ENABLE_COMMENT_AGENT and all_comments:
+                comment_analysis = await analyze_comments(all_comments)
+                if comment_analysis:
+                    await xhs_store.save_comment_analysis(note_id, comment_analysis)
+                    utils.logger.info(f"[XiaoHongShuCrawler.get_comments] Comment analysis saved for note {note_id}")
 
             await asyncio.sleep(crawl_interval)
             utils.logger.info(f"[XiaoHongShuCrawler.get_comments] Sleeping for {crawl_interval} seconds after fetching comments for note {note_id}")

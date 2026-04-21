@@ -18,7 +18,10 @@
 
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import CrawlerStartRequest, CrawlerStatusResponse
+from ..schemas import (
+    CrawlerStartRequest, CrawlerStatusResponse,
+    AgentContentRequest, AgentCommentsRequest, AgentAnalysisResponse,
+)
 from ..services import crawler_manager
 
 router = APIRouter(prefix="/crawler", tags=["crawler"])
@@ -61,3 +64,67 @@ async def get_logs(limit: int = 100):
     """Get recent logs"""
     logs = crawler_manager.logs[-limit:] if limit > 0 else crawler_manager.logs
     return {"logs": [log.model_dump() for log in logs]}
+
+
+# ============================================================
+# AI Agent endpoints
+# ============================================================
+
+@router.post("/analyze-content", response_model=AgentAnalysisResponse)
+async def analyze_content(request: AgentContentRequest):
+    """Analyze content using AI Content Decomposition Agent (Claude API).
+
+    Returns structured analysis: title score, content structure, key points,
+    engagement hooks, suggested tags, content type, and sentiment.
+    """
+    import config
+    from agent.content_agent import ContentAgent
+
+    if not config.CLAUDE_API_KEY:
+        raise HTTPException(status_code=400, detail="CLAUDE_API_KEY not configured")
+
+    content = {
+        "title": request.title,
+        "desc": request.desc,
+        "tags": request.tags,
+        "type": request.content_type,
+        "liked_count": request.liked_count,
+        "collected_count": request.collected_count,
+        "comment_count": request.comment_count,
+        "share_count": request.share_count,
+    }
+
+    agent = ContentAgent()
+    result = await agent.analyze(content)
+
+    if result.success:
+        return AgentAnalysisResponse(success=True, analysis=result.to_dict())
+    return AgentAnalysisResponse(success=False, error=result.error)
+
+
+@router.post("/analyze-comments", response_model=AgentAnalysisResponse)
+async def analyze_comments(request: AgentCommentsRequest):
+    """Analyze comments using AI Comment Analysis Agent (Claude API).
+
+    Returns structured analysis: sentiment distribution, key themes, user intents,
+    engagement insights, top comments summary, and improvement suggestions.
+    """
+    import config
+    from agent.comment_agent import CommentAgent
+
+    if not config.CLAUDE_API_KEY:
+        raise HTTPException(status_code=400, detail="CLAUDE_API_KEY not configured")
+
+    content_context = {
+        "title": request.content_title,
+        "type": request.content_type,
+        "liked_count": 0,
+        "comment_count": len(request.comments),
+    }
+
+    agent = CommentAgent()
+    result = await agent.analyze(request.comments, content_context)
+
+    if result.success:
+        return AgentAnalysisResponse(success=True, analysis=result.to_dict())
+    return AgentAnalysisResponse(success=False, error=result.error)

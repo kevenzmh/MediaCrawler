@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.venv
+venv/
+uv.lock
+
+# IDE
+.vscode
+.idea
+*.iml
+*.xml
+
+# Claude
+.claude
+
+# Runtime data
+data/
+browser_data/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docs build
+docs/.vitepress/cache
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore

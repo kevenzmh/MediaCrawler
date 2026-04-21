@@ -323,6 +323,32 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         }
         return await self.get(uri, params)
 
+    async def get_homefeed_videos(
+        self,
+        feed_type: str = "0",
+        max_cursor: int = 0,
+        count: int = 10,
+    ) -> Any:
+        """
+        获取抖音首页信息流推荐视频
+        :param feed_type: 0=推荐, 1=热点, 2=本地
+        :param max_cursor: 分页游标
+        :param count: 每次请求数量
+        :return:
+        """
+        params = {
+            "channel_id": feed_type,
+            "max_cursor": max_cursor,
+            "count": count,
+            "pull_type": 1,
+        }
+        headers = copy.copy(self.headers)
+        if "Origin" in headers:
+            del headers["Origin"]
+        headers["Referer"] = "https://www.douyin.com/"
+        res = await self.get("/aweme/v1/web/tab/feed/", params, headers)
+        return res
+
     async def get_all_user_aweme_posts(self, sec_user_id: str, callback: Optional[Callable] = None):
         posts_has_more = 1
         max_cursor = ""

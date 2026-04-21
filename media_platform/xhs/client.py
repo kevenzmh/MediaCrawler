@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from proxy.proxy_ip_pool import ProxyIpPool
 
 from .exception import DataFetchError, IPBlockError, NoteNotFoundError
-from .field import SearchNoteType, SearchSortType
+from .field import FeedType, SearchNoteType, SearchSortType
 from .help import get_search_id
 from .extractor import XiaoHongShuExtractor
 
@@ -293,6 +293,38 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             "search_id": search_id,
             "sort": sort.value,
             "note_type": note_type.value,
+        }
+        return await self.post(uri, data)
+
+    async def get_homefeed_notes(
+        self,
+        feed_type: FeedType = FeedType.RECOMMEND,
+        cursor: str = "",
+        limit: int = 20,
+    ) -> Dict:
+        """
+        Get home feed recommendation notes
+        Args:
+            feed_type: Feed category type
+            cursor: Pagination cursor
+            limit: Number of notes per page
+
+        Returns:
+            Dict: Home feed notes response
+        """
+        uri = "/api/sns/web/v1/homefeed"
+        data = {
+            "cursor_score": cursor,
+            "num": limit,
+            "refresh_type": 1,
+            "note_index": 0,
+            "unread_begin_note_id": "",
+            "unread_end_note_id": "",
+            "unread_note_count": 0,
+            "category": feed_type.value,
+            "search_key": "",
+            "need_num": limit,
+            "image_formats": ["jpg", "webp", "avif"],
         }
         return await self.post(uri, data)
 

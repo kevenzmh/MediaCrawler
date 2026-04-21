@@ -349,3 +349,15 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
             await asyncio.sleep(crawl_interval)
             result.extend(videos)
         return result
+
+    async def get_homefeed_videos(
+        self,
+        feed_type: str = "recommend",
+        pcursor: str = "",
+    ) -> Dict:
+        """获取快手首页信息流推荐视频"""
+        data = {
+            "channel": feed_type,
+            "pcursor": pcursor,
+        }
+        return await self.request_rest_v2("/rest/n/feed/channel", data)

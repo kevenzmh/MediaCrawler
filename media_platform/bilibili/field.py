@@ -52,3 +52,8 @@ class CommentOrderType(Enum):
 
     # By time
     TIME = 2
+
+
+class FeedType(Enum):
+    POPULAR = "popular"  # 热门
+    RECOMMEND = "recommend"  # 推荐

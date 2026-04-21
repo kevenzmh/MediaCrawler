@@ -1,0 +1,148 @@
+# MediaCrawler Docker Compose
+# 使用说明:
+#   1. 复制 .env.example 为 .env 并填写配置
+#   2. docker compose up -d          # 仅启动爬虫(默认 JSONL 存储)
+#   3. docker compose --profile db up -d  # 启动爬虫 + MySQL
+#   4. docker compose --profile full up -d # 启动所有服务
+
+services:
+  mediacrawler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mediacrawler
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # 基础配置 (可通过 .env 覆盖)
+      - PLATFORM=${PLATFORM:-xhs}
+      - CRAWLER_TYPE=${CRAWLER_TYPE:-search}
+      - LOGIN_TYPE=${LOGIN_TYPE:-cookie}
+      - COOKIES=${COOKIES:-}
+      - KEYWORDS=${KEYWORDS:-编程副业,编程兼职}
+      - SAVE_DATA_OPTION=${SAVE_DATA_OPTION:-jsonl}
+      - HEADLESS=${HEADLESS:-true}
+      - ENABLE_CDP_MODE=${ENABLE_CDP_MODE:-false}
+      - ENABLE_GET_COMMENTS=${ENABLE_GET_COMMENTS:-true}
+      - ENABLE_GET_MEIDAS=${ENABLE_GET_MEIDAS:-true}
+      - CRAWLER_MAX_NOTES_COUNT=${CRAWLER_MAX_NOTES_COUNT:-15}
+      - MAX_CONCURRENCY_NUM=${MAX_CONCURRENCY_NUM:-1}
+      # 代理配置
+      - ENABLE_IP_PROXY=${ENABLE_IP_PROXY:-false}
+      - IP_PROXY_POOL_COUNT=${IP_PROXY_POOL_COUNT:-2}
+      - IP_PROXY_PROVIDER_NAME=${IP_PROXY_PROVIDER_NAME:-kuaidaili}
+      # AI Agent 配置
+      - ENABLE_CONTENT_AGENT=${ENABLE_CONTENT_AGENT:-false}
+      - ENABLE_COMMENT_AGENT=${ENABLE_COMMENT_AGENT:-false}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-5-20250514}
+      # 数据库连接 (如使用 db/sqlite/postgres 存储)
+      - SAVE_DATA_OPTION=${SAVE_DATA_OPTION:-jsonl}
+      - DB_HOST=${DB_HOST:-mysql}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-mediacrawler}
+      - DB_PASSWORD=${DB_PASSWORD:-mediacrawler}
+      - DB_NAME=${DB_NAME:-mediacrawler}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017}
+    volumes:
+      - ./data:/app/data
+      - ./browser_data:/app/browser_data
+      # 挂载自定义配置文件(可选)
+      # - ./config/local_config.py:/app/config/local_config.py:ro
+      # 挂载多账号配置(可选)
+      # - ./accounts.json:/app/accounts.json:ro
+    # 如使用 API WebUI,暴露端口
+    # ports:
+    #   - "8080:8080"
+    # 默认运行爬虫,如需启动 API 请覆盖 command
+    # command: ["-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mongo:
+        condition: service_started
+    profiles:
+      - db
+      - full
+      - ""  # 默认 profile,始终启动
+
+  # ============================================================
+  # 可选数据库服务 (按需启用)
+  # ============================================================
+
+  mysql:
+    image: mysql:8.0
+    container_name: mediacrawler-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-mediacrawler}
+      MYSQL_USER: ${DB_USER:-mediacrawler}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-mediacrawler}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 初始化 SQL 脚本(可选)
+      # - ./database/schema:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - db
+      - full
+
+  redis:
+    image: redis:7-alpine
+    container_name: mediacrawler-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    profiles:
+      - full
+
+  mongo:
+    image: mongo:7
+    container_name: mediacrawler-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    profiles:
+      - full
+
+  # ============================================================
+  # API WebUI 服务 (可选)
+  # ============================================================
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mediacrawler-api
+    restart: unless-stopped
+    command: ["-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./browser_data:/app/browser_data
+    depends_on:
+      - mediacrawler
+    profiles:
+      - full
+
+volumes:
+  mysql_data:
+  redis_data:
+  mongo_data:

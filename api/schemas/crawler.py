@@ -17,7 +17,7 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 from enum import Enum
-from typing import Optional, Literal
+from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel
 
 
@@ -44,6 +44,7 @@ class CrawlerTypeEnum(str, Enum):
     SEARCH = "search"
     DETAIL = "detail"
     CREATOR = "creator"
+    FEED = "feed"
 
 
 class SaveDataOptionEnum(str, Enum):
@@ -71,6 +72,39 @@ class CrawlerStartRequest(BaseModel):
     save_option: SaveDataOptionEnum = SaveDataOptionEnum.JSONL
     cookies: str = ""
     headless: bool = False
+    feed_category: str = "recommend"  # HomeFeed category
+    enable_content_agent: bool = False  # Enable content decomposition agent
+    enable_comment_agent: bool = False  # Enable comment analysis agent
+
+
+class AgentContentRequest(BaseModel):
+    """Content analysis request"""
+    platform: PlatformEnum
+    content_id: str
+    title: str = ""
+    desc: str = ""
+    tags: List[str] = []
+    content_type: str = ""
+    liked_count: int = 0
+    collected_count: int = 0
+    comment_count: int = 0
+    share_count: int = 0
+
+
+class AgentCommentsRequest(BaseModel):
+    """Comment analysis request"""
+    platform: PlatformEnum
+    content_id: str
+    comments: List[Dict[str, Any]]
+    content_title: str = ""
+    content_type: str = ""
+
+
+class AgentAnalysisResponse(BaseModel):
+    """Agent analysis response"""
+    success: bool
+    analysis: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
 
 class CrawlerStatusResponse(BaseModel):

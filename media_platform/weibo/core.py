@@ -90,6 +90,8 @@ class WeiboCrawler(AbstractCrawler):
                 await self.get_specified_notes(session)
             elif config.CRAWLER_TYPE == "creator":
                 await self.get_creators_and_notes(session)
+            elif config.CRAWLER_TYPE == "feed":
+                await self.feed(session)
         except Exception as ex:
             utils.logger.error(
                 f"[WeiboCrawler._crawl_with_session] Account '{session.account_id}' error: {ex}"
@@ -460,6 +462,63 @@ class WeiboCrawler(AbstractCrawler):
             updated_note = await self.get_note_full_text(note_item, _client)
             result.append(updated_note)
         return result
+
+    async def feed(self, session: Optional[AccountSession] = None) -> None:
+        """Crawl weibo home feed posts."""
+        client = session.api_client if session else self.account_manager.sessions[0].api_client
+        utils.logger.info(f"[WeiboCrawler.feed] Begin crawl weibo home feed (account: {session.account_id if session else 'default'})")
+
+        feed_category = config.FEED_CATEGORY.lower()
+        feed_type_map = {
+            "hot": "102803",
+            "recommend": "102803_ctg1_600059",
+        }
+        feed_type = feed_type_map.get(feed_category, "102803")
+        utils.logger.info(f"[WeiboCrawler.feed] Feed category: {feed_category}, feed type: {feed_type}")
+
+        since_id = ""
+        total_count = 0
+        max_pages = config.FEED_MAX_PAGES
+
+        for page in range(1, max_pages + 1):
+            try:
+                utils.logger.info(f"[WeiboCrawler.feed] Crawling home feed page {page}")
+                feed_res = await client.get_homefeed_posts(feed_type=feed_type, since_id=since_id, page=page)
+
+                cards = feed_res.get("cards", []) if feed_res else []
+                if not cards:
+                    utils.logger.info("[WeiboCrawler.feed] No more feed posts")
+                    break
+
+                note_ids = []
+                for card in cards:
+                    mblog = card.get("mblog", {})
+                    if mblog and mblog.get("id"):
+                        await weibo_store.update_weibo_note(card)
+                        await self.get_note_images(mblog, client)
+                        note_ids.append(str(mblog.get("id")))
+                        total_count += 1
+
+                # Get comments
+                if config.ENABLE_GET_COMMENTS:
+                    semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+                    task_list = [
+                        self.get_note_comments(note_id=note_id, semaphore=semaphore, client=client)
+                        for note_id in note_ids
+                    ]
+                    await asyncio.gather(*task_list)
+
+                since_id = feed_res.get("cardlistInfo", {}).get("since_id", "")
+                if not since_id:
+                    break
+
+                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+                utils.logger.info(f"[WeiboCrawler.feed] Page {page} done, total: {total_count}")
+            except Exception as e:
+                utils.logger.error(f"[WeiboCrawler.feed] Error on page {page}: {e}")
+                break
+
+        utils.logger.info(f"[WeiboCrawler.feed] Home feed crawl finished, total posts: {total_count}")
 
     async def close(self):
         """Close all browser contexts"""

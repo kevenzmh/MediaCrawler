@@ -19,3 +19,10 @@
 
 
 # -*- coding: utf-8 -*-
+from enum import Enum
+
+
+class FeedType(Enum):
+    RECOMMEND = "recommend"  # 推荐
+    HOT = "hot"  # 热门
+    FOLLOW = "follow"  # 关注

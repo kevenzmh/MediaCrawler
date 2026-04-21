@@ -1,0 +1,42 @@
+# docker-compose.override.yml 示例
+# 复制此文件为 docker-compose.override.yml 并根据需要修改
+# Docker Compose 会自动加载此文件覆盖 docker-compose.yml 的默认配置
+
+services:
+  mediacrawler:
+    # 示例: 挂载自定义账号配置
+    # volumes:
+    #   - ./accounts.json:/app/accounts.json:ro
+
+    # 示例: 修改爬虫启动命令(使用特定平台和参数)
+    # command: ["main.py", "--platform", "xhs", "--type", "search", "--keywords", "Python编程"]
+
+    # 示例: 启用 GPU 加速(如需要)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # 示例: 自定义 MySQL 配置
+  # mysql:
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: your_secure_password
+  #   ports:
+  #     - "13306:3306"  # 映射到非标准端口
+
+  # 示例: 添加 phpMyAdmin 管理界面
+  # phpmyadmin:
+  #   image: phpmyadmin/phpmyadmin
+  #   container_name: mediacrawler-phpmyadmin
+  #   environment:
+  #     PMA_HOST: mysql
+  #     PMA_PORT: 3306
+  #   ports:
+  #     - "8081:80"
+  #   depends_on:
+  #     - mysql
+  #   profiles:
+  #     - full

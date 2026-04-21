@@ -105,6 +105,12 @@ async def update_xhs_note(note_item: Dict):
 
     video_url = ','.join(get_video_url_arr(note_item))
 
+    # AI content analysis (if enabled)
+    ai_analysis = None
+    if config.ENABLE_CONTENT_AGENT:
+        from agent.runner import analyze_content as _analyze_content
+        ai_analysis = await _analyze_content(note_item)
+
     local_db_item = {
         "note_id": note_item.get("note_id"),  # Note ID
         "type": note_item.get("type"),  # Note type
@@ -127,6 +133,7 @@ async def update_xhs_note(note_item: Dict):
         "note_url": f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={note_item.get('xsec_token')}&xsec_source=pc_search",  # Note URL
         "source_keyword": source_keyword_var.get(),  # Search keyword
         "xsec_token": note_item.get("xsec_token"),  # xsec_token
+        "ai_analysis": ai_analysis,  # AI content analysis result
     }
     utils.logger.info(f"[store.xhs.update_xhs_note] xhs note: {local_db_item}")
     await XhsStoreFactory.create_store().store_content(local_db_item)
@@ -179,6 +186,31 @@ async def update_xhs_note_comment(note_id: str, comment_item: Dict):
     }
     utils.logger.info(f"[store.xhs.update_xhs_note_comment] xhs note comment:{local_db_item}")
     await XhsStoreFactory.create_store().store_comment(local_db_item)
+
+
+async def save_comment_analysis(note_id: str, analysis: Dict):
+    """
+    Save AI comment analysis result for a note.
+    The analysis is saved as a JSONL file in the data directory.
+    Args:
+        note_id: Note ID
+        analysis: Analysis result dict from CommentAgent
+    """
+    import json
+    import os
+    import aiofiles
+
+    data_dir = config.SAVE_DATA_PATH or os.path.join(os.getcwd(), "data", config.PLATFORM)
+    os.makedirs(data_dir, exist_ok=True)
+    file_path = os.path.join(data_dir, f"comment_analysis_{config.PLATFORM}.jsonl")
+
+    record = {
+        "note_id": note_id,
+        "analysis": analysis,
+        "timestamp": utils.get_current_timestamp(),
+    }
+    async with aiofiles.open(file_path, 'a', encoding='utf-8') as f:
+        await f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 async def save_creator(user_id: str, creator: Dict):

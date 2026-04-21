@@ -108,6 +108,8 @@ class KuaishouCrawler(AbstractCrawler):
                 await self.get_specified_videos(session)
             elif config.CRAWLER_TYPE == "creator":
                 await self.get_creators_and_videos(session)
+            elif config.CRAWLER_TYPE == "feed":
+                await self.feed(session)
         except Exception as ex:
             utils.logger.error(
                 f"[KuaishouCrawler._crawl_with_session] Account '{session.account_id}' error: {ex}"
@@ -403,6 +405,58 @@ class KuaishouCrawler(AbstractCrawler):
         for video_detail in video_details:
             if video_detail is not None:
                 await kuaishou_store.update_kuaishou_video(video_detail)
+
+    async def feed(self, session: Optional[AccountSession] = None) -> None:
+        """Crawl kuaishou home feed videos."""
+        client = session.api_client if session else self.account_manager.sessions[0].api_client
+        utils.logger.info(f"[KuaishouCrawler.feed] Begin crawl kuaishou home feed (account: {session.account_id if session else 'default'})")
+
+        feed_category = config.FEED_CATEGORY.lower()
+        feed_type_map = {
+            "recommend": "recommend",
+            "hot": "hot",
+            "follow": "follow",
+        }
+        feed_type = feed_type_map.get(feed_category, "recommend")
+        utils.logger.info(f"[KuaishouCrawler.feed] Feed category: {feed_category}, feed type: {feed_type}")
+
+        pcursor = ""
+        total_count = 0
+        max_pages = config.FEED_MAX_PAGES
+
+        for page in range(1, max_pages + 1):
+            try:
+                utils.logger.info(f"[KuaishouCrawler.feed] Crawling home feed page {page}")
+                feed_res = await client.get_homefeed_videos(feed_type=feed_type, pcursor=pcursor)
+
+                feeds = feed_res.get("feeds", []) if feed_res else []
+                if not feeds:
+                    utils.logger.info("[KuaishouCrawler.feed] No more feed videos")
+                    break
+
+                photo_ids = []
+                for feed_item in feeds:
+                    photo_id = feed_item.get("photo", {}).get("id", "") or feed_item.get("id", "")
+                    if photo_id:
+                        await kuaishou_store.update_kuaishou_video(feed_item)
+                        photo_ids.append(photo_id)
+                        total_count += 1
+
+                # Get comments
+                if config.ENABLE_GET_COMMENTS:
+                    await self.batch_get_video_comments(photo_ids, session=session)
+
+                pcursor = feed_res.get("pcursor", "")
+                if pcursor == "no_more":
+                    break
+
+                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+                utils.logger.info(f"[KuaishouCrawler.feed] Page {page} done, total: {total_count}")
+            except Exception as e:
+                utils.logger.error(f"[KuaishouCrawler.feed] Error on page {page}: {e}")
+                break
+
+        utils.logger.info(f"[KuaishouCrawler.feed] Home feed crawl finished, total videos: {total_count}")
 
     async def close(self):
         """Close all browser contexts"""

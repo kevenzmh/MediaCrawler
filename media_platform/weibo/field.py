@@ -37,3 +37,8 @@ class SearchType(Enum):
 
     # Video
     VIDEO = "64"
+
+
+class FeedType(Enum):
+    HOT = "102803"  # 热门
+    RECOMMEND = "102803_ctg1_600059"  # 推荐

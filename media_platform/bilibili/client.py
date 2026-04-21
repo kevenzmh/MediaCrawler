@@ -564,3 +564,17 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
             await asyncio.sleep(crawl_interval)
             result.extend(dynamics_list)
         return result
+
+    async def get_homefeed_videos(
+        self,
+        feed_type: str = "popular",
+        pn: int = 1,
+        ps: int = 20,
+    ) -> Dict:
+        """获取B站首页推荐/热门视频"""
+        if feed_type == "popular":
+            uri = "/x/web-interface/popular"
+        else:
+            uri = "/x/web-interface/wbi/index/top/feed/rcmd"
+        params = {"pn": pn, "ps": ps}
+        return await self.get(uri, params)

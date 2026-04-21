@@ -62,6 +62,7 @@ class CrawlerTypeEnum(str, Enum):
     SEARCH = "search"
     DETAIL = "detail"
     CREATOR = "creator"
+    FEED = "feed"
 
 
 class SaveDataOptionEnum(str, Enum):
@@ -162,7 +163,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             CrawlerTypeEnum,
             typer.Option(
                 "--type",
-                help="Crawler type (search=Search | detail=Detail | creator=Creator)",
+                help="Crawler type (search=Search | detail=Detail | creator=Creator | feed=HomeFeed)",
                 rich_help_panel="Basic Configuration",
             ),
         ] = _coerce_enum(CrawlerTypeEnum, config.CRAWLER_TYPE, CrawlerTypeEnum.SEARCH),
@@ -309,6 +310,40 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 show_default=True,
             ),
         ] = str(config.ENABLE_CHECKPOINT),
+        feed_category: Annotated[
+            str,
+            typer.Option(
+                "--feed_category",
+                help="HomeFeed category (xhs: recommend/fashion/food/cosmetics/movie/career/emotion/hourse/game/travel/fitness | dy: recommend/hot | bili: popular/recommend | wb: hot | ks: recommend)",
+                rich_help_panel="Basic Configuration",
+            ),
+        ] = config.FEED_CATEGORY,
+        enable_content_agent: Annotated[
+            str,
+            typer.Option(
+                "--enable_content_agent",
+                help="Whether to enable content decomposition AI agent (Claude API), supports yes/true/t/y/1 or no/false/f/n/0",
+                rich_help_panel="Runtime Configuration",
+                show_default=True,
+            ),
+        ] = str(config.ENABLE_CONTENT_AGENT),
+        enable_comment_agent: Annotated[
+            str,
+            typer.Option(
+                "--enable_comment_agent",
+                help="Whether to enable comment analysis AI agent (Claude API), supports yes/true/t/y/1 or no/false/f/n/0",
+                rich_help_panel="Runtime Configuration",
+                show_default=True,
+            ),
+        ] = str(config.ENABLE_COMMENT_AGENT),
+        claude_api_key: Annotated[
+            str,
+            typer.Option(
+                "--claude_api_key",
+                help="Claude API key for AI agent features (get from https://console.anthropic.com/)",
+                rich_help_panel="Runtime Configuration",
+            ),
+        ] = config.CLAUDE_API_KEY,
     ) -> SimpleNamespace:
         """MediaCrawler 命令行入口"""
 
@@ -341,6 +376,10 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         config.IP_PROXY_POOL_COUNT = ip_proxy_pool_count
         config.IP_PROXY_PROVIDER_NAME = ip_proxy_provider_name
         config.ENABLE_CHECKPOINT = _to_bool(enable_checkpoint)
+        config.FEED_CATEGORY = feed_category
+        config.ENABLE_CONTENT_AGENT = _to_bool(enable_content_agent)
+        config.ENABLE_COMMENT_AGENT = _to_bool(enable_comment_agent)
+        config.CLAUDE_API_KEY = claude_api_key
 
         # Set platform-specific ID lists for detail/creator mode
         if specified_id_list:

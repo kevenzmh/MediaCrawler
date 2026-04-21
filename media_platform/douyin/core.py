@@ -32,7 +32,7 @@ from var import crawler_type_var, source_keyword_var
 
 from .client import DouYinClient
 from .exception import DataFetchError
-from .field import PublishTimeType
+from .field import PublishTimeType, FeedType
 from .help import parse_video_info_from_url, parse_creator_info_from_url
 from .login import DouYinLogin
 
@@ -83,6 +83,8 @@ class DouYinCrawler(AbstractCrawler):
                 await self.get_specified_awemes(session)
             elif config.CRAWLER_TYPE == "creator":
                 await self.get_creators_and_videos(session)
+            elif config.CRAWLER_TYPE == "feed":
+                await self.feed(session)
         except Exception as ex:
             utils.logger.error(
                 f"[DouYinCrawler._crawl_with_session] Account '{session.account_id}' error: {ex}"
@@ -331,6 +333,63 @@ class DouYinCrawler(AbstractCrawler):
 
             video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
             await self.batch_get_note_comments(video_ids, client=client)
+
+    async def feed(self, session: Optional[AccountSession] = None) -> None:
+        """Crawl douyin home feed recommendation videos."""
+        from .field import FeedType
+        client = session.api_client if session else self.account_manager.sessions[0].api_client
+        utils.logger.info(f"[DouYinCrawler.feed] Begin crawl douyin home feed (account: {session.account_id if session else 'default'})")
+
+        feed_category = config.FEED_CATEGORY.lower()
+        feed_type_map = {
+            "recommend": "0",
+            "hot": "1",
+            "local": "2",
+        }
+        feed_type = feed_type_map.get(feed_category, "0")
+        utils.logger.info(f"[DouYinCrawler.feed] Feed category: {feed_category}, feed type: {feed_type}")
+
+        max_cursor = 0
+        total_count = 0
+        max_pages = config.FEED_MAX_PAGES
+
+        for page in range(1, max_pages + 1):
+            try:
+                utils.logger.info(f"[DouYinCrawler.feed] Crawling home feed page {page}, max_cursor: {max_cursor}")
+                feed_res = await client.get_homefeed_videos(
+                    feed_type=feed_type,
+                    max_cursor=max_cursor,
+                    count=10,
+                )
+                aweme_list = feed_res.get("aweme_list", [])
+                if not aweme_list:
+                    utils.logger.info("[DouYinCrawler.feed] No more feed videos")
+                    break
+
+                aweme_ids = []
+                for aweme_item in aweme_list:
+                    aweme_id = aweme_item.get("aweme_id", "")
+                    if aweme_id:
+                        await douyin_store.update_douyin_aweme(aweme_item)
+                        await self.get_aweme_media(aweme_item, client)
+                        aweme_ids.append(aweme_id)
+                        total_count += 1
+
+                await self.batch_get_note_comments(aweme_ids, client)
+
+                max_cursor = feed_res.get("max_cursor", 0)
+                has_more = feed_res.get("has_more", 0)
+                if not has_more:
+                    utils.logger.info("[DouYinCrawler.feed] Home feed has no more items")
+                    break
+
+                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+                utils.logger.info(f"[DouYinCrawler.feed] Page {page} done, total: {total_count}")
+            except Exception as e:
+                utils.logger.error(f"[DouYinCrawler.feed] Error on page {page}: {e}")
+                break
+
+        utils.logger.info(f"[DouYinCrawler.feed] Home feed crawl finished, total videos: {total_count}")
 
     async def fetch_creator_video_detail(self, video_list: List[Dict]):
         """
