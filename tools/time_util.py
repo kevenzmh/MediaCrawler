@@ -126,6 +126,27 @@ def rfc2822_to_timestamp(rfc2822_time):
     return timestamp
 
 
+def is_timestamp_in_date_range(
+    ts: int,
+    start_date: str = "",
+    end_date: str = "",
+) -> bool:
+    if not start_date and not end_date:
+        return True
+    if ts > 1000000000000:
+        ts = int(ts / 1000)
+    item_dt = datetime.fromtimestamp(ts)
+    if start_date:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        if item_dt < start_dt:
+            return False
+    if end_date:
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+        if item_dt >= end_dt:
+            return False
+    return True
+
+
 if __name__ == '__main__':
     # Example usage
     _rfc2822_time = "Sat Dec 23 17:12:54 +0800 2023"

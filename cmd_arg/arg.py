@@ -345,6 +345,22 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 rich_help_panel="Runtime Configuration",
             ),
         ] = config.CLAUDE_API_KEY,
+        start_date: Annotated[
+            str,
+            typer.Option(
+                "--start_date",
+                help="Only crawl content published on or after this date (YYYY-MM-DD), empty means no lower bound",
+                rich_help_panel="Date Filter",
+            ),
+        ] = config.START_DATE,
+        end_date: Annotated[
+            str,
+            typer.Option(
+                "--end_date",
+                help="Only crawl content published before this date (YYYY-MM-DD), empty means no upper bound",
+                rich_help_panel="Date Filter",
+            ),
+        ] = config.END_DATE,
     ) -> SimpleNamespace:
         """MediaCrawler 命令行入口"""
 
@@ -381,6 +397,8 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         config.ENABLE_CONTENT_AGENT = _to_bool(enable_content_agent)
         config.ENABLE_COMMENT_AGENT = _to_bool(enable_comment_agent)
         config.CLAUDE_API_KEY = claude_api_key
+        config.START_DATE = start_date
+        config.END_DATE = end_date
 
         # Set platform-specific ID lists for detail/creator mode
         if specified_id_list:

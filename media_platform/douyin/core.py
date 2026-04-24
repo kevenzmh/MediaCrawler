@@ -28,6 +28,7 @@ from base.base_crawler import AbstractCrawler
 from store import douyin as douyin_store
 from tools import utils
 from tools.checkpoint import CheckpointManager
+from tools.time_util import is_timestamp_in_date_range
 from var import crawler_type_var, source_keyword_var
 
 from .client import DouYinClient
@@ -194,6 +195,17 @@ class DouYinCrawler(AbstractCrawler):
                         if config.DY_MAX_VIDEO_DURATION > 0 and duration_sec > config.DY_MAX_VIDEO_DURATION:
                             utils.logger.info(f"[DouYinCrawler.search] 视频时长 {duration_sec:.0f}s 超过最大 {config.DY_MAX_VIDEO_DURATION}s，跳过: {aweme_info.get('aweme_id')}")
                             continue
+                    # 日期过滤
+                    if not is_timestamp_in_date_range(
+                        aweme_info.get("create_time", 0),
+                        config.START_DATE,
+                        config.END_DATE,
+                    ):
+                        utils.logger.info(
+                            f"[DouYinCrawler.search] Aweme {aweme_info.get('aweme_id')} published at "
+                            f"{aweme_info.get('create_time')} is out of date range [{config.START_DATE}, {config.END_DATE}], skipping"
+                        )
+                        continue
                     aweme_list.append(aweme_info.get("aweme_id", ""))
                     page_aweme_list.append(aweme_info.get("aweme_id", ""))
                     await douyin_store.update_douyin_aweme(aweme_item=aweme_info)

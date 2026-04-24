@@ -31,6 +31,7 @@ from model.m_xiaohongshu import NoteUrlInfo, CreatorUrlInfo
 from store import xhs as xhs_store
 from tools import utils
 from tools.checkpoint import CheckpointManager
+from tools.time_util import is_timestamp_in_date_range
 from var import crawler_type_var, source_keyword_var
 
 from .client import XiaoHongShuClient
@@ -201,6 +202,16 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     note_details = await asyncio.gather(*task_list)
                     for note_detail in note_details:
                         if note_detail:
+                            if not is_timestamp_in_date_range(
+                                note_detail.get("time", 0),
+                                config.START_DATE,
+                                config.END_DATE,
+                            ):
+                                utils.logger.info(
+                                    f"[XiaoHongShuCrawler.search] Note {note_detail.get('note_id')} published at "
+                                    f"{note_detail.get('time')} is out of date range [{config.START_DATE}, {config.END_DATE}], skipping"
+                                )
+                                continue
                             await xhs_store.update_xhs_note(note_detail)
                             await self.get_notice_media(note_detail, client)
                             note_ids.append(note_detail.get("note_id"))
