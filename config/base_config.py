@@ -7,6 +7,27 @@
 # Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
 #
 
+import os
+
+
+def _env_bool(key: str, default: bool) -> bool:
+    val = os.environ.get(key, "")
+    if val.lower() in ("true", "t", "yes", "y", "1"):
+        return True
+    if val.lower() in ("false", "f", "no", "n", "0"):
+        return False
+    return default
+
+
+def _env_str(key: str, default: str) -> str:
+    return os.environ.get(key, default)
+
+
+def _env_int(key: str, default: int) -> int:
+    val = os.environ.get(key, "")
+    return int(val) if val else default
+
+
 # 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：
 # 1. 不得用于任何商业用途。
 # 2. 使用时应遵守目标平台的使用条款和robots.txt规则。
@@ -18,32 +39,30 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 # Basic configuration
-PLATFORM = "xhs"  # Platform, xhs | dy | ks | bili | wb | tieba | zhihu | jd
+PLATFORM = _env_str("PLATFORM", "xhs")
 
 # 是否使用海外版小红书 (rednote.com)
 # 开启后 API 走 webapi.rednote.com，cookie 域使用 .rednote.com
 XHS_INTERNATIONAL = False
 
-KEYWORDS = "编程副业,编程兼职"  # Keyword search configuration, separated by English commas
-LOGIN_TYPE = "qrcode"  # qrcode or phone or cookie
-COOKIES = ""
-CRAWLER_TYPE = (
-    "search"  # Crawling type, search (keyword search) | detail (post details) | creator (creator homepage data)
-)
+KEYWORDS = _env_str("KEYWORDS", "编程副业,编程兼职")
+LOGIN_TYPE = _env_str("LOGIN_TYPE", "qrcode")
+COOKIES = _env_str("COOKIES", "")
+CRAWLER_TYPE = _env_str("CRAWLER_TYPE", "search")
 # Whether to enable IP proxy
-ENABLE_IP_PROXY = False
+ENABLE_IP_PROXY = _env_bool("ENABLE_IP_PROXY", False)
 
 # Number of proxy IP pools
-IP_PROXY_POOL_COUNT = 2
+IP_PROXY_POOL_COUNT = _env_int("IP_PROXY_POOL_COUNT", 2)
 
 # Proxy IP provider name
-IP_PROXY_PROVIDER_NAME = "kuaidaili"  # kuaidaili | wandouhttp
+IP_PROXY_PROVIDER_NAME = _env_str("IP_PROXY_PROVIDER_NAME", "kuaidaili")
 
 # Setting to True will not open the browser (headless browser)
 # Setting False will open a browser
 # If Xiaohongshu keeps scanning the code to log in but fails, open the browser and manually pass the sliding verification code.
 # If Douyin keeps prompting failure, open the browser and see if mobile phone number verification appears after scanning the QR code to log in. If it does, manually go through it and try again.
-HEADLESS = False
+HEADLESS = _env_bool("HEADLESS", False)
 
 # Whether to save login status
 SAVE_LOGIN_STATE = True
@@ -52,21 +71,21 @@ SAVE_LOGIN_STATE = True
 # 是否启用 CDP 模式 - 使用用户本地的 Chrome/Edge 浏览器进行爬取，具有更好的反检测能力
 # 开启后，会自动检测并启动用户的 Chrome/Edge 浏览器，通过 CDP 协议进行控制
 # 该方式使用真实浏览器环境，包括用户的扩展、Cookie 和设置，大幅降低被风控检测的风险
-ENABLE_CDP_MODE = True
+ENABLE_CDP_MODE = _env_bool("ENABLE_CDP_MODE", True)
 
 # CDP 调试端口，用于与浏览器通信
 # 如果端口被占用，系统会自动尝试下一个可用端口
-CDP_DEBUG_PORT = 9222
+CDP_DEBUG_PORT = _env_int("CDP_DEBUG_PORT", 9222)
 
 # 自定义浏览器路径（可选）
 # 如果为空，系统会自动检测 Chrome/Edge 的安装路径
 # Windows 示例: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
 # macOS 示例: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-CUSTOM_BROWSER_PATH = ""
+CUSTOM_BROWSER_PATH = _env_str("CUSTOM_BROWSER_PATH", "")
 
 # 是否在 CDP 模式下启用无头模式
 # 注意：即使设置为 True，某些反检测功能在无头模式下可能无法正常工作
-CDP_HEADLESS = False
+CDP_HEADLESS = _env_bool("CDP_HEADLESS", False)
 
 # 浏览器启动超时时间（秒）
 BROWSER_LAUNCH_TIMEOUT = 60
@@ -83,39 +102,39 @@ CDP_CONNECT_EXISTING = False
 AUTO_CLOSE_BROWSER = True
 
 # Data saving type option configuration, supports: csv, db, json, jsonl, sqlite, excel, postgres. It is best to save to DB, with deduplication function.
-SAVE_DATA_OPTION = "jsonl"  # csv or db or json or jsonl or sqlite or excel or postgres
+SAVE_DATA_OPTION = _env_str("SAVE_DATA_OPTION", "jsonl")
 
 # Data saving path, if not specified by default, it will be saved to the data folder.
-SAVE_DATA_PATH = ""
+SAVE_DATA_PATH = _env_str("SAVE_DATA_PATH", "")
 
 # Browser file configuration cached by the user's browser
 USER_DATA_DIR = "%s_user_data_dir"  # %s will be replaced by platform name
 
 # The number of pages to start crawling starts from the first page by default
-START_PAGE = 1
+START_PAGE = _env_int("START_PAGE", 1)
 
 # Control the number of crawled videos/posts
-CRAWLER_MAX_NOTES_COUNT = 15
+CRAWLER_MAX_NOTES_COUNT = _env_int("CRAWLER_MAX_NOTES_COUNT", 15)
 
 # Controlling the number of concurrent crawlers
-MAX_CONCURRENCY_NUM = 1
+MAX_CONCURRENCY_NUM = _env_int("MAX_CONCURRENCY_NUM", 1)
 
 # HomeFeed information flow configuration
-FEED_CATEGORY = "recommend"  # HomeFeed category, different platforms have different categories
+FEED_CATEGORY = _env_str("FEED_CATEGORY", "recommend")
 FEED_MAX_PAGES = 5  # Maximum number of HomeFeed pages to crawl
 
 # Whether to enable crawling media mode (including image or video resources), crawling media is not enabled by default
-ENABLE_GET_MEIDAS = True
+ENABLE_GET_MEIDAS = _env_bool("ENABLE_GET_MEIDAS", True)
 
 # Whether to enable comment crawling mode. Comment crawling is enabled by default.
-ENABLE_GET_COMMENTS = True
+ENABLE_GET_COMMENTS = _env_bool("ENABLE_GET_COMMENTS", True)
 
 # Control the number of crawled first-level comments (single video/post)
 CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 10
 
 # Whether to enable the mode of crawling second-level comments. By default, crawling of second-level comments is not enabled.
 # If the old version of the project uses db, you need to refer to schema/tables.sql line 287 to add table fields.
-ENABLE_GET_SUB_COMMENTS = False
+ENABLE_GET_SUB_COMMENTS = _env_bool("ENABLE_GET_SUB_COMMENTS", False)
 
 # word cloud related
 # Whether to enable generating comment word clouds
@@ -154,13 +173,13 @@ SIGN_SERVICE_URL = ""
 
 # ==================== AI Agent 配置 ====================
 # 是否启用内容拆解 Agent (使用 Claude API 对爬取内容进行结构化分析)
-ENABLE_CONTENT_AGENT = False
+ENABLE_CONTENT_AGENT = _env_bool("ENABLE_CONTENT_AGENT", False)
 # 是否启用评论分析 Agent (使用 Claude API 对评论进行情感/主题/洞察分析)
-ENABLE_COMMENT_AGENT = False
+ENABLE_COMMENT_AGENT = _env_bool("ENABLE_COMMENT_AGENT", False)
 # Claude API 密钥 (从 https://console.anthropic.com/ 获取)
-CLAUDE_API_KEY = ""
+CLAUDE_API_KEY = _env_str("CLAUDE_API_KEY", "")
 # Claude 模型选择
-CLAUDE_MODEL = "claude-sonnet-4-5-20250514"
+CLAUDE_MODEL = _env_str("CLAUDE_MODEL", "claude-sonnet-4-5-20250514")
 # Agent 并发数
 CLAUDE_MAX_CONCURRENT = 3
 

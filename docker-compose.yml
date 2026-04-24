@@ -14,47 +14,14 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      # 基础配置 (可通过 .env 覆盖)
-      - PLATFORM=${PLATFORM:-xhs}
-      - CRAWLER_TYPE=${CRAWLER_TYPE:-search}
-      - LOGIN_TYPE=${LOGIN_TYPE:-cookie}
-      - COOKIES=${COOKIES:-}
-      - KEYWORDS=${KEYWORDS:-编程副业,编程兼职}
-      - SAVE_DATA_OPTION=${SAVE_DATA_OPTION:-jsonl}
-      - HEADLESS=${HEADLESS:-true}
-      - ENABLE_CDP_MODE=${ENABLE_CDP_MODE:-false}
-      - ENABLE_GET_COMMENTS=${ENABLE_GET_COMMENTS:-true}
-      - ENABLE_GET_MEIDAS=${ENABLE_GET_MEIDAS:-true}
-      - CRAWLER_MAX_NOTES_COUNT=${CRAWLER_MAX_NOTES_COUNT:-15}
-      - MAX_CONCURRENCY_NUM=${MAX_CONCURRENCY_NUM:-1}
-      # 代理配置
-      - ENABLE_IP_PROXY=${ENABLE_IP_PROXY:-false}
-      - IP_PROXY_POOL_COUNT=${IP_PROXY_POOL_COUNT:-2}
-      - IP_PROXY_PROVIDER_NAME=${IP_PROXY_PROVIDER_NAME:-kuaidaili}
-      # AI Agent 配置
-      - ENABLE_CONTENT_AGENT=${ENABLE_CONTENT_AGENT:-false}
-      - ENABLE_COMMENT_AGENT=${ENABLE_COMMENT_AGENT:-false}
-      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-}
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-5-20250514}
-      # 数据库连接 (如使用 db/sqlite/postgres 存储)
-      - SAVE_DATA_OPTION=${SAVE_DATA_OPTION:-jsonl}
-      - MYSQL_DB_HOST=${MYSQL_DB_HOST:-mysql}
-      - MYSQL_DB_PORT=${MYSQL_DB_PORT:-3306}
-      - MYSQL_DB_USER=${MYSQL_DB_USER:-mediacrawler}
-      - MYSQL_DB_PWD=${MYSQL_DB_PWD:-mediacrawler}
-      - MYSQL_DB_NAME=${MYSQL_DB_NAME:-media_crawler}
-      - REDIS_DB_HOST=${REDIS_DB_HOST:-redis}
-      - REDIS_DB_PORT=${REDIS_DB_PORT:-6379}
-      - MONGODB_HOST=${MONGODB_HOST:-mongo}
-      - MONGODB_PORT=${MONGODB_PORT:-27017}
+    # 所有配置通过 .env 文件传入，不在 environment 中重复声明
+    # environment 块会覆盖 env_file 的值，长值(如 COOKIES)可能被截断
     volumes:
       - ./data:/app/data
       - ./browser_data:/app/browser_data
       # 挂载自定义配置文件(可选)
       # - ./config/local_config.py:/app/config/local_config.py:ro
-      # 挂载多账号配置(可选)
-      # - ./accounts.json:/app/accounts.json:ro
+      - ./accounts.json:/app/accounts.json:ro
     # 如使用 API WebUI,暴露端口
     # ports:
     #   - "8080:8080"

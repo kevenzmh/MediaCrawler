@@ -50,13 +50,14 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         headers: Dict,
         cookie_dict: Dict,
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        playwright_page=None,
     ):
         self.proxy = proxy
         self.timeout = timeout
         self.headers = headers
         self._host = "https://www.douyin.com"
         self.cookie_dict = cookie_dict
-        # Initialize proxy pool (from ProxyRefreshMixin)
+        self.playwright_page = playwright_page
         self.init_proxy_pool(proxy_ip_pool)
         self._sign_service = get_sign_service("douyin")
 
