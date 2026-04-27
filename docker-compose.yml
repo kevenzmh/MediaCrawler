@@ -21,7 +21,7 @@ services:
       - ./browser_data:/app/browser_data
       # 挂载自定义配置文件(可选)
       # - ./config/local_config.py:/app/config/local_config.py:ro
-      - ./accounts.json:/app/accounts.json:ro
+      - ./accounts.json:/app/accounts.json
     # 如使用 API WebUI,暴露端口
     # ports:
     #   - "8080:8080"
@@ -95,15 +95,17 @@ services:
     container_name: mediacrawler-api
     restart: unless-stopped
     command: ["-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+    env_file:
+      - .env
     ports:
-      - "8080:8080"
+      - "9090:8080"
     volumes:
       - ./data:/app/data
       - ./browser_data:/app/browser_data
-    depends_on:
-      - mediacrawler
+      - ./accounts.json:/app/accounts.json
     profiles:
       - full
+      - api
 
 volumes:
   mysql_data:

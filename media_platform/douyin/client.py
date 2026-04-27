@@ -146,11 +146,15 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             local_storage = await self.playwright_page.evaluate("() => window.localStorage")
             if local_storage.get("HasUserLogin", "") == "1":
                 return True
-        # Cookie-based fallback
+        # Cookie-based fallback: check sessionid or LOGIN_STATUS
+        if self.cookie_dict.get("sessionid") or self.cookie_dict.get("sessionid_ss"):
+            return True
         if self.cookie_dict.get("LOGIN_STATUS") == "1":
             return True
         if browser_context:
             _, cookie_dict = utils.convert_cookies(await browser_context.cookies())
+            if cookie_dict.get("sessionid") or cookie_dict.get("sessionid_ss"):
+                return True
             if cookie_dict.get("LOGIN_STATUS") == "1":
                 return True
         return False

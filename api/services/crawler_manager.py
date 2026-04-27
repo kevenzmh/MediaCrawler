@@ -211,7 +211,6 @@ class CrawlerManager:
         cmd.extend(["--type", config.crawler_type.value])
         cmd.extend(["--save_data_option", config.save_option.value])
 
-        # Pass different arguments based on crawler type
         if config.crawler_type.value == "search" and config.keywords:
             cmd.extend(["--keywords", config.keywords])
         elif config.crawler_type.value == "detail" and config.specified_ids:
@@ -228,7 +227,23 @@ class CrawlerManager:
         if config.cookies:
             cmd.extend(["--cookies", config.cookies])
 
-        cmd.extend(["--headless", "true" if config.headless else "false"])
+        import config as app_config
+        if getattr(app_config, "START_DATE", ""):
+            cmd.extend(["--start_date", app_config.START_DATE])
+        if getattr(app_config, "END_DATE", ""):
+            cmd.extend(["--end_date", app_config.END_DATE])
+
+        # Docker environment: force cookie login + headless mode
+        in_docker = os.path.exists("/.dockerenv")
+        if in_docker:
+            if "--lt" in cmd:
+                idx = cmd.index("--lt")
+                cmd[idx + 1] = "cookie"
+            if "--headless" in cmd:
+                idx = cmd.index("--headless")
+                cmd[idx + 1] = "true"
+            else:
+                cmd.extend(["--headless", "true"])
 
         return cmd
 
