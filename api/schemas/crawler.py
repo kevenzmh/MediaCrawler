@@ -28,8 +28,6 @@ class PlatformEnum(str, Enum):
     KUAISHOU = "ks"
     BILIBILI = "bili"
     WEIBO = "wb"
-    TIEBA = "tieba"
-    ZHIHU = "zhihu"
 
 
 class LoginTypeEnum(str, Enum):

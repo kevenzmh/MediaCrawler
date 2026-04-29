@@ -24,8 +24,6 @@ class TestPlatformEnum:
         assert PlatformEnum.KUAISHOU.value == "ks"
         assert PlatformEnum.BILIBILI.value == "bili"
         assert PlatformEnum.WEIBO.value == "wb"
-        assert PlatformEnum.TIEBA.value == "tieba"
-        assert PlatformEnum.ZHIHU.value == "zhihu"
 
 
 class TestCrawlerTypeEnum:

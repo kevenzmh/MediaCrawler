@@ -27,7 +27,7 @@
 
 ## 📖 Introducción del Proyecto
 
-Una poderosa **herramienta de recolección de datos de redes sociales multiplataforma** que soporta el rastreo de información pública de plataformas principales incluyendo Xiaohongshu, Douyin, Kuaishou, Bilibili, Weibo, Tieba, Zhihu, y más.
+Una poderosa **herramienta de recolección de datos de redes sociales multiplataforma** que soporta el rastreo de información pública de plataformas principales incluyendo Xiaohongshu, Douyin, Kuaishou, Bilibili, Weibo, y más.
 
 ### 🔧 Principios Técnicos
 
@@ -43,8 +43,6 @@ Una poderosa **herramienta de recolección de datos de redes sociales multiplata
 | Kuaishou   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
 | Bilibili   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
 | Weibo   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| Tieba   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| Zhihu   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
 
 
 <strong>¡Lanzamiento Mayor de MediaCrawlerPro! ¡El código abierto no es fácil, bienvenido a suscribirse y apoyar!</strong>
@@ -168,7 +166,7 @@ Después de iniciar exitosamente, visite `http://localhost:8080` para abrir la i
 
 #### Crear y activar entorno virtual de Python
 
-> Si rastrea Douyin y Zhihu, necesita instalar el entorno nodejs con anticipación, versión mayor o igual a: `16`
+> Si rastrea Douyin, necesita instalar el entorno nodejs con anticipación, versión mayor o igual a: `16`
 
 ```shell
 # Entrar al directorio raíz del proyecto

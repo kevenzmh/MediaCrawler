@@ -191,6 +191,4 @@ from .xhs_config import *
 from .dy_config import *
 from .ks_config import *
 from .weibo_config import *
-from .tieba_config import *
-from .zhihu_config import *
 from .jd_config import *

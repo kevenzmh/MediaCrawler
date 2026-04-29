@@ -27,7 +27,7 @@
 
 ## 📖 Project Introduction
 
-A powerful **multi-platform social media data collection tool** that supports crawling public information from mainstream platforms including Xiaohongshu, Douyin, Kuaishou, Bilibili, Weibo, Tieba, Zhihu, and more.
+A powerful **multi-platform social media data collection tool** that supports crawling public information from mainstream platforms including Xiaohongshu, Douyin, Kuaishou, Bilibili, Weibo, and more.
 
 ### 🔧 Technical Principles
 
@@ -43,8 +43,6 @@ A powerful **multi-platform social media data collection tool** that supports cr
 | Kuaishou   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
 | Bilibili   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
 | Weibo   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| Tieba   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
-| Zhihu   | ✅          | ✅              | ✅        | ✅              | ✅          | ✅        | ✅              |
 
 
 <strong>MediaCrawlerPro Major Release! Open source is not easy, welcome to subscribe and support!</strong>
@@ -168,7 +166,7 @@ After successful startup, visit `http://localhost:8080` to open the WebUI interf
 
 #### Create and activate Python virtual environment
 
-> If crawling Douyin and Zhihu, you need to install nodejs environment in advance, version greater than or equal to: `16`
+> If crawling Douyin, you need to install nodejs environment in advance, version greater than or equal to: `16`
 
 ```shell
 # Enter project root directory

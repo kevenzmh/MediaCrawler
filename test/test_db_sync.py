@@ -225,26 +225,8 @@ if __name__ == "__main__":
 #   - xhs_note_comment:
 #     [*] Modified fields:
 #       - comment_id: BIGINT -> VARCHAR(255)
-#   - zhihu_content:
-#     [*] Modified fields:
-#       - created_time: BIGINT -> VARCHAR(32)
-#       - content_id: BIGINT -> VARCHAR(64)
-#   - zhihu_creator:
-#     [*] Modified fields:
-#       - user_id: INTEGER -> VARCHAR(64)
-#   - tieba_note:
-#     [*] Modified fields:
-#       - publish_time: BIGINT -> VARCHAR(255)
-#       - tieba_id: INTEGER -> VARCHAR(255)
-#       - note_id: BIGINT -> VARCHAR(644)
 # --- End of Report ---
 # >>> Manual confirmation required: Synchronize ORM model to MySQL database? (y/N): y
 # Modified field in table kuaishou_video: user_id (type changed to VARCHAR(64))
 # Modified field in table xhs_note_comment: comment_id (type changed to VARCHAR(255))
-# Modified field in table zhihu_content: created_time (type changed to VARCHAR(32))
-# Modified field in table zhihu_content: content_id (type changed to VARCHAR(64))
-# Modified field in table zhihu_creator: user_id (type changed to VARCHAR(64))
-# Modified field in table tieba_note: publish_time (type changed to VARCHAR(255))
-# Modified field in table tieba_note: tieba_id (type changed to VARCHAR(255))
-# Modified field in table tieba_note: note_id (type changed to VARCHAR(644))
 # MySQL database synchronization completed.

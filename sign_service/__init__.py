@@ -18,11 +18,10 @@ def _auto_register():
     """懒加载自动注册所有内置 Provider。"""
     from .providers.xhs_provider import XhsSignProvider
     from .providers.douyin_provider import DouyinSignProvider
-    from .providers.zhihu_provider import ZhihuSignProvider
     from .providers.bilibili_provider import BilibiliSignProvider
     from .providers.noop_provider import NoOpSignProvider
 
-    for cls in [XhsSignProvider, DouyinSignProvider, ZhihuSignProvider, NoOpSignProvider]:
+    for cls in [XhsSignProvider, DouyinSignProvider, NoOpSignProvider]:
         _registry.register(cls())
     # Bilibili 需要运行时密钥，注册一个占位实例
     _registry.register(BilibiliSignProvider())
@@ -32,7 +31,7 @@ def get_sign_service(platform: str, remote_url: Optional[str] = None) -> SignSer
     """获取指定平台的签名服务实例。
 
     Args:
-        platform: 平台标识，如 'xhs', 'douyin', 'zhihu', 'bilibili', 'noop'
+        platform: 平台标识，如 'xhs', 'douyin', 'bilibili', 'noop'
         remote_url: 可选的远程签名服务地址
     """
     global _auto_registered

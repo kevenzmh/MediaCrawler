@@ -18,7 +18,7 @@ cp .env.example .env
 ```
 
 关键配置项:
-- `PLATFORM`: 爬取平台 (xhs/dy/ks/bili/wb/tieba/zhihu)
+- `PLATFORM`: 爬取平台 (xhs/dy/ks/bili/wb)
 - `CRAWLER_TYPE`: 爬取类型 (search/detail/creator/feed)
 - `LOGIN_TYPE`: 登录方式 (qrcode/phone/cookie)
 - `COOKIES`: Cookie 字符串(登录方式为 cookie 时必填)

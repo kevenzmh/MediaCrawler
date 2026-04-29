@@ -39,11 +39,9 @@ from base.base_crawler import AbstractCrawler
 from media_platform.bilibili import BilibiliCrawler
 from media_platform.douyin import DouYinCrawler
 from media_platform.kuaishou import KuaishouCrawler
-from media_platform.tieba import TieBaCrawler
 from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
 from media_platform.jd import JdCrawler
-from media_platform.zhihu import ZhihuCrawler
 from tools.async_file_writer import AsyncFileWriter
 from var import crawler_type_var
 
@@ -55,8 +53,6 @@ class CrawlerFactory:
         "ks": KuaishouCrawler,
         "bili": BilibiliCrawler,
         "wb": WeiboCrawler,
-        "tieba": TieBaCrawler,
-        "zhihu": ZhihuCrawler,
         "jd": JdCrawler,
     }
 
