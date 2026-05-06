@@ -63,6 +63,11 @@ def _safe_filename(name: str) -> str:
 def _ext_from_url(url: str) -> str:
     """从 URL 推断图片扩展名"""
     url_lower = url.lower().split("?")[0]
+    # 京东图片 URL 格式如 .jpg.webp，去掉 .webp 后是真实格式
+    if ".jpg.webp" in url_lower or ".jpeg.webp" in url_lower:
+        return ".jpg"
+    if ".png.webp" in url_lower:
+        return ".png"
     if url_lower.endswith(".webp"):
         return ".webp"
     elif url_lower.endswith(".png"):
@@ -71,9 +76,4 @@ def _ext_from_url(url: str) -> str:
         return ".gif"
     elif url_lower.endswith(".jpg") or url_lower.endswith(".jpeg"):
         return ".jpg"
-    # 京东图片 URL 格式如 .jpg.webp，去掉 .webp 后是 jpg
-    if ".jpg.webp" in url_lower or ".jpeg.webp" in url_lower:
-        return ".jpg"
-    if ".png.webp" in url_lower:
-        return ".png"
     return ".jpg"

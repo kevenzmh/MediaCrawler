@@ -242,13 +242,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 utils.logger.info(f"[XiaoHongShuCrawler.get_creators_and_notes] Parse creator URL info: {creator_info}")
                 user_id = creator_info.user_id
 
-                createor_info: Dict = await client.get_creator_info(
+                creator_info: Dict = await client.get_creator_info(
                     user_id=user_id,
                     xsec_token=creator_info.xsec_token,
                     xsec_source=creator_info.xsec_source
                 )
-                if createor_info:
-                    await xhs_store.save_creator(user_id, creator=createor_info)
+                if creator_info:
+                    await xhs_store.save_creator(user_id, creator=creator_info)
             except ValueError as e:
                 utils.logger.error(f"[XiaoHongShuCrawler.get_creators_and_notes] Failed to parse creator URL: {e}")
                 continue
@@ -519,7 +519,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
 
     async def get_notice_media(self, note_detail: Dict, client: Optional[XiaoHongShuClient] = None):
         _client = client or self.account_manager.sessions[0].api_client
-        if not config.ENABLE_GET_MEIDAS:
+        if not config.ENABLE_GET_MEDIAS:
             utils.logger.info(f"[XiaoHongShuCrawler.get_notice_media] Crawling image mode is not enabled")
             return
         await self.get_note_images(note_detail, _client)
@@ -528,7 +528,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
     async def get_note_images(self, note_item: Dict, client: Optional[XiaoHongShuClient] = None):
         """Get note images."""
         _client = client or self.account_manager.sessions[0].api_client
-        if not config.ENABLE_GET_MEIDAS:
+        if not config.ENABLE_GET_MEDIAS:
             return
         note_id = note_item.get("note_id")
         image_list: List[Dict] = note_item.get("image_list", [])
@@ -555,7 +555,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
     async def get_notice_video(self, note_item: Dict, client: Optional[XiaoHongShuClient] = None):
         """Get note videos."""
         _client = client or self.account_manager.sessions[0].api_client
-        if not config.ENABLE_GET_MEIDAS:
+        if not config.ENABLE_GET_MEDIAS:
             return
         note_id = note_item.get("note_id")
 

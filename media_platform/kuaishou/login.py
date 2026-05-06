@@ -47,7 +47,7 @@ class KuaishouLogin(AbstractLogin):
         self.cookie_str = cookie_str
 
     async def begin(self):
-        """Start login xiaohongshu"""
+        """Start login kuaishou"""
         utils.logger.info("[KuaishouLogin.begin] Begin login kuaishou ...")
         if config.LOGIN_TYPE == "qrcode":
             await self.login_by_qrcode()

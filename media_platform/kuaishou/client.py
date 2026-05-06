@@ -64,11 +64,12 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
 
         async with make_async_client(proxy=self.proxy) as client:
             response = await client.request(method, url, timeout=self.timeout, **kwargs)
+        if response.status_code != 200:
+            raise DataFetchError(f"[KuaiShouClient.request] HTTP {response.status_code}: {response.text[:200]}")
         data: Dict = response.json()
         if data.get("errors"):
-            raise DataFetchError(data.get("errors", "unkonw error"))
-        else:
-            return data.get("data", {})
+            raise DataFetchError(data.get("errors", "unknown error"))
+        return data.get("data", {})
 
     async def get(self, uri: str, params=None) -> Dict:
         final_uri = uri
@@ -206,7 +207,7 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         }
         return await self.post("", post_data)
 
-    async def get_video_by_creater(self, userId: str, pcursor: str = "") -> Dict:
+    async def get_video_by_creator(self, userId: str, pcursor: str = "") -> Dict:
         post_data = {
             "operationName": "visionProfilePhotoList",
             "variables": {"page": "profile", "pcursor": pcursor, "userId": userId},
@@ -329,7 +330,7 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         pcursor = ""
 
         while pcursor != "no_more":
-            videos_res = await self.get_video_by_creater(user_id, pcursor)
+            videos_res = await self.get_video_by_creator(user_id, pcursor)
             if not videos_res:
                 utils.logger.error(
                     f"[KuaiShouClient.get_all_videos_by_creator] The current creator may have been banned by ks, so they cannot access the data."

@@ -48,7 +48,7 @@ class JdLogin(AbstractLogin):
             # 等待用户扫码完成（页面跳转表示登录成功）
             utils.logger.info("[JdLogin] 等待扫码...登录成功后页面将自动跳转")
             await self.context_page.wait_for_url(
-                lambda url: "passport.jd.com" not in url or "passport.jd.com/uclogin" not in url,
+                lambda url: "passport.jd.com" not in url,
                 timeout=120000,
             )
             utils.logger.info("[JdLogin] 扫码登录成功")

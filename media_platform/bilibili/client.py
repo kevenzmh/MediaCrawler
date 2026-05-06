@@ -77,7 +77,7 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
             utils.logger.error(f"[BilibiliClient.request] Failed to decode JSON from response. status_code: {response.status_code}, response_text: {response.text}")
             raise DataFetchError(f"Failed to decode JSON, content: {response.text}")
         if data.get("code") != 0:
-            raise DataFetchError(data.get("message", "unkonw error"))
+            raise DataFetchError(data.get("message", "unknown error"))
         else:
             return data.get("data", {})
 
@@ -305,7 +305,7 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
                 for comment in comment_list:
                     comment_id = comment['rpid']
                     if (comment.get("rcount", 0) > 0):
-                        {await self.get_video_all_level_two_comments(video_id, comment_id, CommentOrderType.DEFAULT, 10, crawl_interval, callback)}
+                        await self.get_video_all_level_two_comments(video_id, comment_id, CommentOrderType.DEFAULT, 10, crawl_interval, callback)
             if len(result) + len(comment_list) > max_count:
                 comment_list = comment_list[:max_count - len(result)]
             if callback:  # If there is a callback function, execute it

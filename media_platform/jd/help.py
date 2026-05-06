@@ -1,3 +1,4 @@
+import asyncio
 import re
 from typing import List, Optional
 
@@ -232,4 +233,3 @@ class JDExtractor:
         }""")
 
 
-import asyncio

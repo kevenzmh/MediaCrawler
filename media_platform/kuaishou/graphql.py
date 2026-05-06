@@ -20,14 +20,14 @@
 
 # Kuaishou's data transmission is based on GraphQL
 # This class is responsible for obtaining some GraphQL schemas
+from pathlib import Path
 from typing import Dict
 
 
 class KuaiShouGraphQL:
-    graphql_queries: Dict[str, str]= {}
-
     def __init__(self):
-        self.graphql_dir = "media_platform/kuaishou/graphql/"
+        self.graphql_queries: Dict[str, str] = {}
+        self.graphql_dir = str(Path(__file__).parent / "graphql") + "/"
         self.load_graphql_queries()
 
     def load_graphql_queries(self):

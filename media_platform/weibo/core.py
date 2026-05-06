@@ -154,8 +154,7 @@ class WeiboCrawler(AbstractCrawler):
         client = session.api_client if session else self.account_manager.sessions[0].api_client
         utils.logger.info(f"[WeiboCrawler.search] Begin search weibo keywords (account: {session.account_id if session else 'default'})")
         weibo_limit_count = 10  # weibo limit page fixed value
-        if config.CRAWLER_MAX_NOTES_COUNT < weibo_limit_count:
-            config.CRAWLER_MAX_NOTES_COUNT = weibo_limit_count
+        max_notes = max(config.CRAWLER_MAX_NOTES_COUNT, weibo_limit_count)
         start_page = config.START_PAGE
 
         # Set the search type based on the configuration for weibo
@@ -185,7 +184,7 @@ class WeiboCrawler(AbstractCrawler):
                 continue
             page = keyword_progress.get("page", start_page) if keyword_progress else start_page
             utils.logger.info(f"[WeiboCrawler.search] Current search keyword: {keyword}, start page: {page}")
-            while (page - start_page + 1) * weibo_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
+            while (page - start_page + 1) * weibo_limit_count <= max_notes:
                 if page < start_page:
                     utils.logger.info(f"[WeiboCrawler.search] Skip page: {page}")
                     page += 1
@@ -229,8 +228,8 @@ class WeiboCrawler(AbstractCrawler):
         client = session.api_client if session else self.account_manager.sessions[0].api_client
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [self.get_note_info_task(note_id=note_id, semaphore=semaphore, client=client) for note_id in config.WEIBO_SPECIFIED_ID_LIST]
-        video_details = await asyncio.gather(*task_list)
-        for note_item in video_details:
+        note_details = await asyncio.gather(*task_list)
+        for note_item in note_details:
             if note_item:
                 await weibo_store.update_weibo_note(note_item)
         await self.batch_get_notes_comments(config.WEIBO_SPECIFIED_ID_LIST, client)
@@ -316,7 +315,7 @@ class WeiboCrawler(AbstractCrawler):
         :return:
         """
         _client = client or self.account_manager.sessions[0].api_client
-        if not config.ENABLE_GET_MEIDAS:
+        if not config.ENABLE_GET_MEDIAS:
             utils.logger.info(f"[WeiboCrawler.get_note_images] Crawling image mode is not enabled")
             return
 
@@ -337,7 +336,7 @@ class WeiboCrawler(AbstractCrawler):
             content = await _client.get_note_image(url)
             await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
             utils.logger.info(f"[WeiboCrawler.get_note_images] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after fetching image")
-            if content != None:
+            if content is not None:
                 extension_file_name = url.split(".")[-1]
                 await weibo_store.update_weibo_note_image(pid, content, extension_file_name)
 
@@ -350,13 +349,13 @@ class WeiboCrawler(AbstractCrawler):
         client = session.api_client if session else self.account_manager.sessions[0].api_client
         utils.logger.info(f"[WeiboCrawler.get_creators_and_notes] Begin get weibo creators (account: {session.account_id if session else 'default'})")
         for user_id in config.WEIBO_CREATOR_ID_LIST:
-            createor_info_res: Dict = await client.get_creator_info_by_id(creator_id=user_id)
-            if createor_info_res:
-                createor_info: Dict = createor_info_res.get("userInfo", {})
-                utils.logger.info(f"[WeiboCrawler.get_creators_and_notes] creator info: {createor_info}")
-                if not createor_info:
+            creator_info_res: Dict = await client.get_creator_info_by_id(creator_id=user_id)
+            if creator_info_res:
+                creator_info: Dict = creator_info_res.get("userInfo", {})
+                utils.logger.info(f"[WeiboCrawler.get_creators_and_notes] creator info: {creator_info}")
+                if not creator_info:
                     raise DataFetchError("Get creator info error")
-                await weibo_store.save_creator(user_id, user_info=createor_info)
+                await weibo_store.save_creator(user_id, user_info=creator_info)
 
                 # Create a wrapper callback to get full text before saving data
                 # Note: we capture `client` via default argument to avoid late-binding issues
@@ -398,10 +397,9 @@ class WeiboCrawler(AbstractCrawler):
                 proxy=playwright_proxy,
                 viewport={"width": 1920, "height": 1080},
                 user_agent=user_agent,
-                channel="chrome",
             )
         else:
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel="chrome")
+            browser = await chromium.launch(headless=headless, proxy=playwright_proxy)
             return await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
 
     async def get_note_full_text(self, note_item: Dict, client: Optional[WeiboClient] = None) -> Dict:

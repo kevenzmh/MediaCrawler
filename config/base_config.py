@@ -43,7 +43,7 @@ PLATFORM = _env_str("PLATFORM", "xhs")
 
 # 是否使用海外版小红书 (rednote.com)
 # 开启后 API 走 webapi.rednote.com，cookie 域使用 .rednote.com
-XHS_INTERNATIONAL = False
+XHS_INTERNATIONAL = _env_bool("XHS_INTERNATIONAL", False)
 
 KEYWORDS = _env_str("KEYWORDS", "编程副业,编程兼职")
 LOGIN_TYPE = _env_str("LOGIN_TYPE", "qrcode")
@@ -65,7 +65,7 @@ IP_PROXY_PROVIDER_NAME = _env_str("IP_PROXY_PROVIDER_NAME", "kuaidaili")
 HEADLESS = _env_bool("HEADLESS", False)
 
 # Whether to save login status
-SAVE_LOGIN_STATE = True
+SAVE_LOGIN_STATE = _env_bool("SAVE_LOGIN_STATE", True)
 
 # ==================== CDP (Chrome DevTools Protocol) 配置 ====================
 # 是否启用 CDP 模式 - 使用用户本地的 Chrome/Edge 浏览器进行爬取，具有更好的反检测能力
@@ -95,11 +95,11 @@ BROWSER_LAUNCH_TIMEOUT = 60
 # 用户需要在 Chrome 中开启远程调试：chrome://inspect/#remote-debugging
 # 或者使用命令行参数启动 Chrome：--remote-debugging-port=9222
 # 这种方式反检测效果最好，因为直接使用用户真实浏览器的所有 Cookie、扩展和浏览历史
-CDP_CONNECT_EXISTING = False
+CDP_CONNECT_EXISTING = _env_bool("CDP_CONNECT_EXISTING", True)
 
 # 程序结束时是否自动关闭浏览器
 # 设置为 False 可以保持浏览器运行，方便调试
-AUTO_CLOSE_BROWSER = True
+AUTO_CLOSE_BROWSER = _env_bool("AUTO_CLOSE_BROWSER", True)
 
 # Data saving type option configuration, supports: csv, db, json, jsonl, sqlite, excel, postgres. It is best to save to DB, with deduplication function.
 SAVE_DATA_OPTION = _env_str("SAVE_DATA_OPTION", "jsonl")
@@ -124,7 +124,7 @@ FEED_CATEGORY = _env_str("FEED_CATEGORY", "recommend")
 FEED_MAX_PAGES = 5  # Maximum number of HomeFeed pages to crawl
 
 # Whether to enable crawling media mode (including image or video resources), crawling media is not enabled by default
-ENABLE_GET_MEIDAS = _env_bool("ENABLE_GET_MEIDAS", True)
+ENABLE_GET_MEDIAS = _env_bool("ENABLE_GET_MEDIAS", True)
 
 # Whether to enable comment crawling mode. Comment crawling is enabled by default.
 ENABLE_GET_COMMENTS = _env_bool("ENABLE_GET_COMMENTS", True)
@@ -138,7 +138,7 @@ ENABLE_GET_SUB_COMMENTS = _env_bool("ENABLE_GET_SUB_COMMENTS", False)
 
 # word cloud related
 # Whether to enable generating comment word clouds
-ENABLE_GET_WORDCLOUD = False
+ENABLE_GET_WORDCLOUD = _env_bool("ENABLE_GET_WORDCLOUD", False)
 # Custom words and their groups
 # Add rule: xx:yy where xx is a custom-added phrase, and yy is the group name to which the phrase xx is assigned.
 CUSTOM_WORDS = {
@@ -160,12 +160,12 @@ END_DATE = _env_str("END_DATE", "")
 
 # 是否禁用 SSL 证书验证。仅在使用企业代理、Burp Suite、mitmproxy 等会注入自签名证书的中间人代理时设为 True。
 # 警告：禁用 SSL 验证将使所有流量暴露于中间人攻击风险，请勿在生产环境中开启。
-DISABLE_SSL_VERIFY = False
+DISABLE_SSL_VERIFY = _env_bool("DISABLE_SSL_VERIFY", False)
 
 # 是否启用断点续爬功能
 # 开启后，搜索模式下每页爬取成功后会自动保存进度到 data/.checkpoint/ 目录
 # 中断后再次启动相同任务时，会自动从上次进度恢复，跳过已爬取的页码
-ENABLE_CHECKPOINT = True
+ENABLE_CHECKPOINT = _env_bool("ENABLE_CHECKPOINT", True)
 
 # ==================== 签名服务配置 ====================
 # 签名服务模式: "local" 使用本地签名算法 | "remote" 调用远程签名服务

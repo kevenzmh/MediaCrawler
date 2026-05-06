@@ -525,10 +525,9 @@ class BilibiliCrawler(AbstractCrawler):
                 proxy=playwright_proxy,
                 viewport={"width": 1920, "height": 1080},
                 user_agent=user_agent,
-                channel="chrome",
             )
         else:
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel="chrome")
+            browser = await chromium.launch(headless=headless, proxy=playwright_proxy)
             return await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
 
     async def close(self):
@@ -545,7 +544,7 @@ class BilibiliCrawler(AbstractCrawler):
         :return:
         """
         _client = client or self.account_manager.sessions[0].api_client
-        if not config.ENABLE_GET_MEIDAS:
+        if not config.ENABLE_GET_MEDIAS:
             utils.logger.info(f"[BilibiliCrawler.get_bilibili_video] Crawling image mode is not enabled")
             return
         video_item_view: Dict = video_item.get("View")

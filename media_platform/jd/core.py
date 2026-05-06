@@ -257,13 +257,13 @@ class JdCrawler(AbstractCrawler):
             return []
 
     async def get_specified_notes(self, **kwargs):
-        pass
+        utils.logger.warning("[JdCrawler] detail crawl type is not supported on JD platform")
 
     async def get_creators_and_notes(self, **kwargs):
-        pass
+        utils.logger.warning("[JdCrawler] creator crawl type is not supported on JD platform")
 
     async def feed(self, **kwargs):
-        pass
+        utils.logger.warning("[JdCrawler] feed crawl type is not supported on JD platform")
 
     async def launch_browser(
         self,

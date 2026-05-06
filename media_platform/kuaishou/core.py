@@ -138,8 +138,7 @@ class KuaishouCrawler(AbstractCrawler):
         utils.logger.info("[KuaishouCrawler.search] Begin search kuaishou keywords")
         client = session.api_client if session else self.account_manager.sessions[0].api_client
         ks_limit_count = 20  # kuaishou limit page fixed value
-        if config.CRAWLER_MAX_NOTES_COUNT < ks_limit_count:
-            config.CRAWLER_MAX_NOTES_COUNT = ks_limit_count
+        max_notes = max(config.CRAWLER_MAX_NOTES_COUNT, ks_limit_count)
         start_page = config.START_PAGE
         checkpoint = CheckpointManager(platform=config.PLATFORM, crawler_type=config.CRAWLER_TYPE)
         if checkpoint.has_checkpoint():
@@ -159,7 +158,7 @@ class KuaishouCrawler(AbstractCrawler):
             )
             while (
                 page - start_page + 1
-            ) * ks_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
+            ) * ks_limit_count <= max_notes:
                 if page < start_page:
                     utils.logger.info(f"[KuaishouCrawler.search] Skip page: {page}")
                     page += 1
@@ -180,7 +179,7 @@ class KuaishouCrawler(AbstractCrawler):
                     continue
 
                 vision_search_photo: Dict = videos_res.get("visionSearchPhoto")
-                if vision_search_photo.get("result") != 1:
+                if not vision_search_photo or vision_search_photo.get("result") != 1:
                     utils.logger.error(
                         f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data "
                     )
@@ -298,7 +297,10 @@ class KuaishouCrawler(AbstractCrawler):
         :return:
         """
         _session = session or (self.account_manager.sessions[0] if self.account_manager.sessions else None)
-        _client = _session.api_client if _session else self.account_manager.sessions[0].api_client
+        if not _session:
+            utils.logger.warning(f"[KuaishouCrawler.get_comments] No available session for video_id: {video_id}")
+            return
+        _client = _session.api_client
         async with semaphore:
             try:
                 utils.logger.info(
@@ -328,7 +330,7 @@ class KuaishouCrawler(AbstractCrawler):
                 current_running_tasks = comment_tasks_var.get()
                 for task in current_running_tasks:
                     task.cancel()
-                time.sleep(20)
+                await asyncio.sleep(20)
                 utils.logger.error(
                     "[KuaishouCrawler.get_comments] Blocked — cookie refresh via browser is not available in headless mode"
                 )
@@ -352,10 +354,9 @@ class KuaishouCrawler(AbstractCrawler):
                 proxy=playwright_proxy,
                 viewport={"width": 1920, "height": 1080},
                 user_agent=user_agent,
-                channel="chrome",
             )
         else:
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel="chrome")
+            browser = await chromium.launch(headless=headless, proxy=playwright_proxy)
             return await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
 
     async def get_creators_and_videos(self, session: Optional[AccountSession] = None) -> None:
@@ -372,9 +373,9 @@ class KuaishouCrawler(AbstractCrawler):
                 user_id = creator_info.user_id
 
                 # get creator detail info from web html content
-                createor_info: Dict = await client.get_creator_info(user_id=user_id)
-                if createor_info:
-                    await kuaishou_store.save_creator(user_id, creator=createor_info)
+                creator_info: Dict = await client.get_creator_info(user_id=user_id)
+                if creator_info:
+                    await kuaishou_store.save_creator(user_id, creator=creator_info)
             except ValueError as e:
                 utils.logger.error(f"[KuaiShouCrawler.get_creators_and_videos] Failed to parse creator URL: {e}")
                 continue
@@ -383,7 +384,7 @@ class KuaishouCrawler(AbstractCrawler):
             all_video_list = await client.get_all_videos_by_creator(
                 user_id=user_id,
                 crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
-                callback=self.fetch_creator_video_detail,
+                callback=lambda videos: self.fetch_creator_video_detail(videos, client=client),
             )
 
             video_ids = [
@@ -391,13 +392,13 @@ class KuaishouCrawler(AbstractCrawler):
             ]
             await self.batch_get_video_comments(video_ids, session=session)
 
-    async def fetch_creator_video_detail(self, video_list: List[Dict]):
+    async def fetch_creator_video_detail(self, video_list: List[Dict], client: Optional[KuaiShouClient] = None):
         """
         Concurrently obtain the specified post list and save the data
         """
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [
-            self.get_video_info_task(post_item.get("photo", {}).get("id"), semaphore)
+            self.get_video_info_task(post_item.get("photo", {}).get("id"), semaphore, client=client)
             for post_item in video_list
         ]
 

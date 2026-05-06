@@ -23,8 +23,10 @@
 # @Desc    :
 
 import re
-from typing import List
+from typing import Dict, List
 
+import config
+from base.base_crawler import AbstractStore
 from var import source_keyword_var
 
 from .weibo_store_media import *
@@ -42,13 +44,16 @@ class WeibostoreFactory:
         "mongodb": WeiboMongoStoreImplement,
         "excel": WeiboExcelStoreImplement,
     }
+    _instance: AbstractStore = None
 
-    @staticmethod
-    def create_store() -> AbstractStore:
-        store_class = WeibostoreFactory.STORES.get(config.SAVE_DATA_OPTION)
-        if not store_class:
-            raise ValueError("[WeibotoreFactory.create_store] Invalid save option only supported csv or db or json or sqlite or mongodb or excel ...")
-        return store_class()
+    @classmethod
+    def create_store(cls) -> AbstractStore:
+        if cls._instance is None:
+            store_class = cls.STORES.get(config.SAVE_DATA_OPTION)
+            if not store_class:
+                raise ValueError("[WeibostoreFactory.create_store] Invalid save option only supported csv or db or json or sqlite or mongodb or excel ...")
+            cls._instance = store_class()
+        return cls._instance
 
 
 async def batch_update_weibo_notes(note_list: List[Dict]):
@@ -78,10 +83,10 @@ async def update_weibo_note(note_item: Dict):
     if not note_item:
         return
 
-    mblog: Dict = note_item.get("mblog")
-    user_info: Dict = mblog.get("user")
+    mblog: Dict = note_item.get("mblog") or {}
+    user_info: Dict = mblog.get("user") or {}
     note_id = mblog.get("id")
-    content_text = mblog.get("text")
+    content_text = mblog.get("text", "")
     clean_text = re.sub(r"<.*?>", "", content_text)
     save_content_item = {
         # Weibo information
@@ -137,8 +142,8 @@ async def update_weibo_note_comment(note_id: str, comment_item: Dict):
     if not comment_item or not note_id:
         return
     comment_id = str(comment_item.get("id"))
-    user_info: Dict = comment_item.get("user")
-    content_text = comment_item.get("text")
+    user_info: Dict = comment_item.get("user") or {}
+    content_text = comment_item.get("text", "")
     clean_text = re.sub(r"<.*?>", "", content_text)
     save_comment_item = {
         "comment_id": comment_id,

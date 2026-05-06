@@ -191,8 +191,9 @@ class WeiboClient(ProxyRefreshMixin):
         max_id_type = 0
         while not is_end and len(result) < max_count:
             comments_res = await self.get_note_comments(note_id, max_id, max_id_type)
-            max_id: int = comments_res.get("max_id")
-            max_id_type: int = comments_res.get("max_id_type")
+            raw_max_id = comments_res.get("max_id")
+            max_id = raw_max_id if raw_max_id is not None else 0
+            max_id_type: int = comments_res.get("max_id_type") or 0
             comment_list: List[Dict] = comments_res.get("data", [])
             is_end = max_id == 0
             if len(result) + len(comment_list) > max_count:
@@ -280,7 +281,7 @@ class WeiboClient(ProxyRefreshMixin):
                 else:
                     return response.content
             except httpx.HTTPError as exc:  # some wrong when call httpx.request method, such as connection error, client error, server error or response status code is not 2xx
-                utils.logger.error(f"[DouYinClient.get_aweme_media] {exc.__class__.__name__} for {exc.request.url} - {exc}")    # Keep original exception type name for developer debugging
+                utils.logger.error(f"[WeiboClient.get_note_image] {exc.__class__.__name__} for {exc.request.url} - {exc}")    # Keep original exception type name for developer debugging
                 return None
 
     async def get_creator_container_info(self, creator_id: str) -> Dict:

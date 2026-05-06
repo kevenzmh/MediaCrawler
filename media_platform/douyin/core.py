@@ -455,7 +455,7 @@ class DouYinCrawler(AbstractCrawler):
             aweme_item (Dict): 抖音作品详情
             client (Optional[DouYinClient]): DouYin client instance
         """
-        if not config.ENABLE_GET_MEIDAS:
+        if not config.ENABLE_GET_MEDIAS:
             utils.logger.info(f"[DouYinCrawler.get_aweme_media] Crawling image mode is not enabled")
             return
         # List of note urls. If it is a short video type, an empty list will be returned.
@@ -477,7 +477,7 @@ class DouYinCrawler(AbstractCrawler):
             client (Optional[DouYinClient]): DouYin client instance
         """
         _client = client or self.account_manager.sessions[0].api_client
-        if not config.ENABLE_GET_MEIDAS:
+        if not config.ENABLE_GET_MEDIAS:
             return
         aweme_id = aweme_item.get("aweme_id")
         # List of note urls. If it is a short video type, an empty list will be returned.
@@ -506,7 +506,7 @@ class DouYinCrawler(AbstractCrawler):
             client (Optional[DouYinClient]): DouYin client instance
         """
         _client = client or self.account_manager.sessions[0].api_client
-        if not config.ENABLE_GET_MEIDAS:
+        if not config.ENABLE_GET_MEDIAS:
             return
         aweme_id = aweme_item.get("aweme_id")
 

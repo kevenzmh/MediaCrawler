@@ -37,7 +37,7 @@ import config
 from base.base_crawler import AbstractStore
 from database.db_session import get_session
 from database.models import KuaishouVideo, KuaishouVideoComment
-from tools import utils, words
+from tools import utils
 from var import crawler_type_var
 from database.mongodb_store_base import MongoDBStoreBase
 
@@ -85,12 +85,12 @@ class KuaishouCsvStoreImplement(AbstractStore):
         await self.writer.write_to_csv(item_type="comments", item=comment_item)
 
     async def store_creator(self, creator: Dict):
-        pass
+        utils.logger.warning(f"[KuaishouStore] store_creator is not supported for this storage backend, skipping creator: {creator.get('user_id', 'unknown')}")
 
 
 class KuaishouDbStoreImplement(AbstractStore):
     async def store_creator(self, creator: Dict):
-        pass
+        utils.logger.warning(f"[KuaishouStore] store_creator is not supported for this storage backend, skipping creator: {creator.get('user_id', 'unknown')}")
 
     async def store_content(self, content_item: Dict):
         """
@@ -164,7 +164,7 @@ class KuaishouJsonStoreImplement(AbstractStore):
         await self.writer.write_single_item_to_json(item_type="comments", item=comment_item)
 
     async def store_creator(self, creator: Dict):
-        pass
+        utils.logger.warning(f"[KuaishouStore] store_creator is not supported for this storage backend, skipping creator: {creator.get('user_id', 'unknown')}")
 
 
 class KuaishouJsonlStoreImplement(AbstractStore):
@@ -179,12 +179,12 @@ class KuaishouJsonlStoreImplement(AbstractStore):
         await self.writer.write_to_jsonl(item_type="comments", item=comment_item)
 
     async def store_creator(self, creator: Dict):
-        pass
+        utils.logger.warning(f"[KuaishouStore] store_creator is not supported for this storage backend, skipping creator: {creator.get('user_id', 'unknown')}")
 
 
 class KuaishouSqliteStoreImplement(KuaishouDbStoreImplement):
     async def store_creator(self, creator: Dict):
-        pass
+        utils.logger.warning(f"[KuaishouStore] store_creator is not supported for this storage backend, skipping creator: {creator.get('user_id', 'unknown')}")
 
 
 class KuaishouMongoStoreImplement(AbstractStore):
